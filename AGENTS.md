@@ -18,6 +18,8 @@ dotnet run --project src/AVALegacyLens [folder | file.lens]
 LENS_DUMP=/tmp/map.txt dotnet test --filter Dump      # every node and link of the sample, as text
 LENS_SHOTS=/tmp/shots dotnet test --filter Screenshots # the README's pictures, headless
 LENS_TEST_MSSQL="Server=localhost,11435;User Id=sa;Password=…;TrustServerCertificate=True" dotnet test   # live SQL Server test
+dotnet run --project src/AVALegacyLens -- --mcp --root samples/ClinicLegacy        # the MCP server on stdio
+LENS_LIVE_SERVER=http://localhost:11434 LENS_LIVE_MODEL=qwen3:1.7b dotnet test --filter LiveModelTests
 ```
 
 `dotnet test | head` stalls: write the output to a file and grep it.
@@ -51,9 +53,23 @@ LENS_TEST_MSSQL="Server=localhost,11435;User Id=sa;Password=…;TrustServerCerti
     `Report` (HTML page and Excel workbook).
   - `Trace.cs`: forward (screen → controls → handlers → calls…) and backward (code → callers → handlers → controls →
     screens → whatever opens them), breadth first, cut at a depth and a step count, repeats marked.
+- `src/AVALegacyLens.Mcp/`: the MCP server, no Avalonia.
+  - `LensTools.cs` (the tools: every map read runs on the host's thread through `OnMap`, which scans the working folder
+    first if nothing is open; `Write` writes only new files through `Workspace`), `LensTools.Orchestration.cs` (batch,
+    steps files, checkpoints of the scan, its marks and the view).
+  - `Hosting.cs`: `ViewState`, `ViewPicture` and `IViewPainter`, `IExplorerSession` (the view, the map, the databases
+    the person added, which agents use but never see), `ExplorerHost`, `HeadlessSession`.
+  - `LensServer.cs`: the instructions every agent is told, the argument checks, the recording of calls. `Recipes.cs`:
+    the 6 recipes. `LiveListener`, `LiveBridge`, `NetworkListener`, `McpCommandLine`, `Workspace` and `Json` are
+    AVAHL7Explorer's (and AVAQueryBuilder's) with the names changed: fix them together.
 - `src/AVALegacyLens/`: the window, built in code with no XAML (`MainWindow.cs`, `MainWindow.Trace.cs`,
-  `MainWindow.Findings.cs` with `FindingsView`, `ConnectionDialog.cs`, `Look.cs`).
+  `MainWindow.Findings.cs` with `FindingsView`, `MainWindow.Agents.cs`, `ConnectionDialog.cs`, `ViewPainter.cs`,
+  `Look.cs`). `Agents/`: `Chat/` and `ChatPanel.cs` are copies of AVAHL7Explorer's (themselves AVA Modeler's
+  `AVAModeler.Chat`) with this app's wording: a fix there may be wanted here. `LiveAgents.cs` (`WindowSession`: agents
+  work on the window's map), `AgentMain.cs` (`--mcp`: Avalonia headless with Skia), `AgentSettings.cs`.
 - `tests/AVALegacyLens.Tests/`: xUnit v3 on Avalonia.Headless. `Samples.cs` scans the sample once for every test.
+  `Agents/AgentTests` (every tool, the no-leak test, every recipe, the chat on `FakeModelServer` and
+  `FakeMessagesServer`), `LiveAgentTests` (the pipe and network doors), `Agents/LiveModelTests` (opt-in).
 - `samples/ClinicLegacy/`: the invented sample system.
 
 ## Rules that keep it working
@@ -69,6 +85,15 @@ LENS_TEST_MSSQL="Server=localhost,11435;User Id=sa;Password=…;TrustServerCerti
   that finds more (a false hit) or fewer fails it. Add to the sample and the list together.
 - **Readers set facts, Analysis judges.** Readers put facts on nodes (`sqlBuiltByHand`, `onErrorResumeNext`,
   `hardCodedPassword`, `override`…); `Analysis.Run` turns them into findings after every scan.
+- **No secret reaches an agent.** Every snippet, note, property and source line an agent gets goes through
+  `Secrets.Mask`; connection strings the person added are never in an answer. `AgentTests.No_tool_result_…` calls
+  every tool on the sample (with a database password in the session) and reads every file they write: a new tool goes
+  into it, and a new kind of secret into `Secrets` and the test's list.
+- **New tools** need `[Description]` on the tool and every parameter (snake_case names), the right `ReadOnly`
+  annotation (the chat takes a reply checkpoint before the first call that isn't read-only), a place in
+  `AgentTests.ToolNames`, a test, and a line in the README. Recipes are run call by call by `AgentTests`.
+- **No real model, keys or user settings in tests.** `SettingsIsolation` points `AgentSettings.FolderOverride` at a
+  temporary folder; chat tests answer from the fake servers.
 - **Every link joins two nodes**: `SystemMap.RemoveDangling` runs at the end of a scan.
 - **Paths in the map are relative to the scanned folder**, with forward slashes; lines count from 1.
 - **Schema, never data.** `DatabaseReader` queries catalog views only; connection strings are never stored (the map

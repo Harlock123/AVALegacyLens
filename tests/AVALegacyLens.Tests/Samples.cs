@@ -25,6 +25,19 @@ public static class Samples
         throw new DirectoryNotFoundException("Couldn't find the samples folder.");
     }
 
+    /// <summary>A copy of the samples in a new temporary folder (agents write into it).</summary>
+    public static string Copy()
+    {
+        var root = Directory.CreateTempSubdirectory("lens-samples-").FullName;
+        foreach (var f in Directory.EnumerateFiles(Folder, "*", SearchOption.AllDirectories))
+        {
+            var to = Path.Combine(root, Path.GetRelativePath(Folder, f));
+            Directory.CreateDirectory(Path.GetDirectoryName(to)!);
+            File.Copy(f, to);
+        }
+        return root;
+    }
+
     /// <summary>The node of a method, by type and name (the first overload).</summary>
     public static Node Method(this SystemMap map, string type, string name) =>
         map.OfKind(NodeKind.Method).Where(m => m.Prop("type") == type && m.Name == name).OrderBy(m => m.Line).FirstOrDefault()

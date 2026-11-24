@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The window: the system tree, the inventory, each item's source with what it uses and what uses it. -->
+  <!-- The window: the system tree, the inventory, items, traces and findings; the AI Chat (F12) and the doors for outside agents. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <AssemblyName>AVALegacyLens</AssemblyName>
@@ -15,7 +15,16 @@
     <!-- Avalonia.FreeDesktop 11.3.12 pulls Tmds.DBus.Protocol 0.21.2, which has a high-severity advisory
          (CVE-2026-39959); take the patched one. -->
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
+    <!-- The MCP server with no window: Avalonia headless with Skia, so render_view draws as the window does. -->
+    <PackageReference Include="Avalonia.Headless" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Skia" Version="11.3.12" />
+    <!-- The AI Chat's Anthropic API (Claude, or a local server that speaks it). -->
+    <PackageReference Include="Anthropic" Version="13.3.0" />
     <ProjectReference Include="..\AVALegacyLens.Core\AVALegacyLens.Core.csproj" />
+    <ProjectReference Include="..\AVALegacyLens.Mcp\AVALegacyLens.Mcp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="AVALegacyLens.Tests" />

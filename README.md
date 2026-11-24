@@ -15,7 +15,7 @@ built by concatenation), config files (connection strings with their passwords n
 live SQL Server database's catalog. **It reads code and schema only, never a table's rows.** So you can ask who writes
 `Patient.LastName`, and trace from a button through the code into the procedure, the table and the trigger it fires. Each link says where in the code it
 was seen and how sure the scan is of it (resolved by the compiler, or matched by name across projects and languages).
-*Work in progress: milestone 5 of 7 (rules, dead code, risks, the estimate and reports).*
+*Work in progress: milestone 6 of 7 (the MCP server and the AI Chat).*
 
 From the map it works out what a rebuild needs to know:
 
@@ -28,6 +28,23 @@ From the map it works out what a rebuild needs to know:
   native Windows calls, ActiveX controls, global state, secrets in config files, very complex code.
 - **An estimate**: a rough size of the rebuild in person-days, from counts the scan is sure of, with its weights shown.
 - **A report**: the lot as one HTML page or an Excel workbook (File › Export Report…).
+
+## AI agents
+
+An **AI Chat** (F12) and an **MCP server** let Claude, or a model running locally, answer questions about the system
+from the map: "what does the patient screen do?", "who writes Patient.LastName?", "what would break if we dropped
+usp_PurgeOldVisits?". The model reads the map with 33 tools, cites file and line for what it says, and says when a link
+is only matched by name or guessed. It reads code and schema only, with passwords masked; a test calls every tool on the
+sample and fails if any password reaches an answer or a file an agent wrote. Six recipes (saved prompts) walk through a
+screen end to end, the rules behind a table, the impact of a change, the rebuild estimate, a rules catalogue and the
+risky code.
+
+```bash
+AVALegacyLens --mcp --root FOLDER [--database CONNECTION]      # the MCP server on stdio, no window
+AVALegacyLens --mcp --attach                                   # a bridge to the open window (AI › Allow AI Agents)
+AVALegacyLens --mcp --http 8776 --root FOLDER                  # over the network, with a token
+claude mcp add avalegacylens -- AVALegacyLens --mcp --attach
+```
 
 ## Running it
 

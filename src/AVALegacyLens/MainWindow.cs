@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using AVALegacyLens.Core;
 using AVALegacyLens.Core.Model;
 using AVALegacyLens.Core.Scanning;
+using AVALegacyLens.Mcp;
 
 namespace AVALegacyLens;
 
@@ -46,6 +47,11 @@ public sealed partial class MainWindow : Window
     public TextBlock UsesTitle { get; } = new() { Foreground = Look.Heading, FontSize = 11, Margin = new Thickness(8, 8, 8, 4) };
     public TextBlock UsedByTitle { get; } = new() { Foreground = Look.Heading, FontSize = 11, Margin = new Thickness(8, 8, 8, 4) };
     public TextBlock txtStatusBar { get; } = new() { Foreground = Look.Heading, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis };
+    public Border ChatHolder { get; } = new() { Width = 440, IsVisible = false, BorderBrush = Look.Border, BorderThickness = new Thickness(1, 0, 0, 0) };
+    /// <summary>Hidden: where render_view draws for agents (controls need a window to take their look).</summary>
+    public Panel AgentStage { get; } = new() { Width = 0, Height = 0, ClipToBounds = true, IsHitTestVisible = false };
+    public MenuItem ChatMenuItem { get; } = new() { Header = "AI _Chat", InputGesture = new KeyGesture(Key.F12), ToggleType = MenuItemToggleType.CheckBox };
+    public MenuItem AllowAgentsMenuItem { get; } = new() { Header = "_Allow AI Agents (MCP)", ToggleType = MenuItemToggleType.CheckBox };
 
     /// <summary>Asks for a folder to scan; tests answer it themselves.</summary>
     public Func<Task<string?>> PickFolder { get; set; }
@@ -88,6 +94,10 @@ public sealed partial class MainWindow : Window
         var status = new Border { Child = txtStatusBar, Background = Look.Bar, BorderBrush = Look.Border, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(12, 5) };
         DockPanel.SetDock(status, Dock.Bottom);
         root.Children.Add(status);
+        DockPanel.SetDock(ChatHolder, Dock.Right);
+        root.Children.Add(ChatHolder);
+        DockPanel.SetDock(AgentStage, Dock.Right);
+        root.Children.Add(AgentStage);
 
         var main = new Grid { ColumnDefinitions = new ColumnDefinitions("340,4,*") };
         var left = new DockPanel { Background = Look.Bar };
@@ -142,6 +152,7 @@ public sealed partial class MainWindow : Window
         DragDrop.SetAllowDrop(this, true);
         ShowInventory();
         Say("Scan a folder of legacy code (File › Scan Folder…, Ctrl+O), open a saved .lens, or drop either here. Try samples/ClinicLegacy.");
+        SetUpAgents();
         if (open != null) _ = OpenAsync(open);
     }
 
@@ -159,6 +170,7 @@ public sealed partial class MainWindow : Window
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F5), Command = new Command(() => _ = Rescan()) });
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F, KeyModifiers.Control), Command = new Command(() => Filter.Focus()) });
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F6), Command = new Command(() => ShowTrace(_current, forward: true)) });
+        KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F12), Command = new Command(ToggleChat) });
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F6, KeyModifiers.Shift), Command = new Command(() => ShowTrace(_current, forward: false)) });
         var file = new MenuItem
         {
@@ -196,7 +208,27 @@ public sealed partial class MainWindow : Window
                 Item("_Collapse the Tree", () => { foreach (var i in _items.Values) i.IsExpanded = false; }),
             },
         };
-        return new Menu { Background = Look.Bar, ItemsSource = new object[] { file, view } };
+        ChatMenuItem.Click += OnToggleChatClick;
+        AllowAgentsMenuItem.Click += OnAllowAgentsClick;
+        var ai = new MenuItem
+        {
+            Header = "_AI",
+            ItemsSource = new object[]
+            {
+                ChatMenuItem,
+                new Separator(),
+                Item("_Working Folder…", () => OnWorkingFolderClick(null, new Avalonia.Interactivity.RoutedEventArgs())),
+                new Separator(),
+                AllowAgentsMenuItem,
+                Item("C_onnect an Agent…", () => _ = ShowConnect()),
+            },
+        };
+        var help = new MenuItem
+        {
+            Header = "_Help",
+            ItemsSource = new object[] { Item("_About", () => Say($"AVA Legacy Lens {typeof(MainWindow).Assembly.GetName().Version?.ToString(3)}: see what a legacy system really does before you rebuild it. MIT licence, Lonnie Watson.")) },
+        };
+        return new Menu { Background = Look.Bar, ItemsSource = new object[] { file, view, ai, help } };
     }
 
     private Control BuildItemPage()
@@ -752,6 +784,37 @@ public sealed partial class MainWindow : Window
     }
 
     public void Say(string text) => txtStatusBar.Text = text;
+
+    private static readonly string[] TabNames = ["inventory", "item", "trace", "rules", "dead code", "problems"];
+
+    /// <summary>What the window shows, for agents (get_view, checkpoints).</summary>
+    internal ViewState CurrentView => new(
+        _map == null ? null : _lensPath ?? _map.Root,
+        Tabs.SelectedIndex is 1 or 2 ? _current?.Id : null,
+        Tabs.SelectedIndex == 2 && TraceBackwardButton.IsChecked == true ? "trace backward" : TabNames[Math.Clamp(Tabs.SelectedIndex, 0, TabNames.Length - 1)],
+        0);
+
+    /// <summary>Shows what an agent asked for (show_in_view, restore_checkpoint): an item, a trace or a tab.</summary>
+    internal void ShowView(ViewState view)
+    {
+        var node = view.Node != null ? _map?[view.Node] : null;
+        switch (view.Tab)
+        {
+            case "item" when node != null:
+                ShowNode(node);
+                if (view.Line > 0) HighlightSource(view.Line, view.Line);
+                break;
+            case "trace" or "trace backward" when node != null:
+                ShowNode(node);
+                ShowTrace(node, view.Tab == "trace");
+                break;
+            default:
+                var i = Array.IndexOf(TabNames, view.Tab);
+                Tabs.SelectedIndex = i < 0 ? 0 : i;
+                if (i >= 3) FillFindings();
+                break;
+        }
+    }
 
     /// <summary>An ICommand for key bindings.</summary>
     private sealed class Command(Action run) : System.Windows.Input.ICommand

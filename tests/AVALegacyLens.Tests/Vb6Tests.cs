@@ -130,5 +130,7 @@ public sealed class Vb6Tests
         Assert.Equal("cn.Open \"uid=sa;pwd=(masked)\"", Secrets.Mask("cn.Open \"uid=sa;pwd=abc\""));
         Assert.True(Secrets.HasPassword("User ID=a;Password=b"));
         Assert.False(Secrets.HasPassword("Integrated Security=SSPI"));
+        Assert.Equal("<add key=\"SmtpPassword\" value=\"(masked)\" />", Secrets.Mask("<add key=\"SmtpPassword\" value=\"Mailbox#2009\" />"));
+        Assert.Equal("<add key=\"ExportFolder\" value=\"\\\\fs\\x\" />", Secrets.Mask("<add key=\"ExportFolder\" value=\"\\\\fs\\x\" />"));
     }
 }
