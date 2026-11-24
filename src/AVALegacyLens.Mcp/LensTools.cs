@@ -487,6 +487,49 @@ public sealed partial class LensTools(IExplorerHost host)
             return new JsonObject { ["rules"] = map.Findings.Count(f => f.Kind == FindingKind.Rule), ["dead"] = map.Findings.Count(f => f.Kind == FindingKind.DeadCode), ["risks"] = map.Findings.Count(f => f.Kind == FindingKind.Risk) };
         }, cancel);
 
+    // ───────────────────────────── hand-offs ─────────────────────────────
+
+    [McpServerTool(Name = "export_parity_plan", ReadOnly = false, Idempotent = false, Destructive = false, OpenWorld = false)]
+    [Description("Writes the parity plan for the rebuild as an AVAParityCheck suite (.parity), a new file in the working folder: a check for each table the live code writes (old database against new, keyed on its primary key, money within 0.01, dates as dates, text trimmed, time stamps ignored) and for each procedure it runs that returns rows, each with a note on why it's there and what reaches it. The databases are named connections \"old\" and \"new\", set up in AVAParityCheck: no connection string is written.")]
+    public Task<string> ExportParityPlan(
+        [Description("The new .parity file, relative to the working folder.")] string output,
+        CancellationToken cancel = default) =>
+        Write("wrote a parity plan", output, "The parity plan", [Core.Handoff.ParityPlan.Extension], (map, full) =>
+        {
+            var plan = Core.Handoff.ParityPlan.Make(map);
+            File.WriteAllText(full, plan.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+            var checks = (JsonArray)plan["checks"]!;
+            return new JsonObject { ["checks"] = new JsonArray(checks.Select(c => (JsonNode)(string)c!["name"]!).ToArray()), ["connections"] = "old and new: set them up in AVAParityCheck" };
+        }, cancel);
+
+    [McpServerTool(Name = "export_axaml", ReadOnly = false, Idempotent = false, Destructive = false, OpenWorld = false)]
+    [Description("Drafts old screens as Avalonia .axaml windows for AVAUIDesigner, new files in the working folder: the same controls at the same places and sizes, each mapped to its Avalonia counterpart (limits and items kept; frames and panels become bordered canvases), and comments naming the old handler behind each event and the rules it checked. One screen to a file, or every live screen into a folder.")]
+    public Task<string> ExportAxaml(
+        [Description("A new .axaml file for one screen, or a folder for every live screen (each named after its screen).")] string output,
+        [Description("The screen (frmPatient). Leave out to draft every live screen into the output folder.")] string? screen = null,
+        CancellationToken cancel = default) =>
+        OnMap("drafted screens", (_, map) =>
+        {
+            var forms = string.IsNullOrWhiteSpace(screen)
+                ? map.OfKind(NodeKind.Form).Where(f => f.Prop("dead") != "true").OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList()
+                : [Resolve(map, screen)];
+            if (forms.Any(f => f.Kind != NodeKind.Form)) throw new ArgumentException($"{forms[0].Name} isn't a screen. list_screens shows them.");
+            var single = !string.IsNullOrWhiteSpace(screen);
+            var written = new JsonArray();
+            // Two screens with one name (a VB and a C# version, say): each file is named after its project too.
+            var twice = forms.GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in forms)
+            {
+                var name = twice.Contains(f.Name) ? $"{f.Prop("project")}-{f.Name}" : f.Name;
+                var full = single ? _files.Resolve(output, "The draft", Core.Handoff.AxamlDraft.Extension) : _files.Resolve(Path.Combine(output, name + Core.Handoff.AxamlDraft.Extension));
+                _files.CheckWritable(full);
+                File.WriteAllText(full, Core.Handoff.AxamlDraft.Make(map, f.Id));
+                _files.Wrote(full);
+                written.Add(_files.Relative(full));
+            }
+            return new JsonObject { ["wrote"] = written, ["screens"] = forms.Count, ["note"] = "Open them in AVAUIDesigner; events are listed in comments, to rebuild behind them." };
+        }, cancel);
+
     // ───────────────────────────── the view ─────────────────────────────
 
     [McpServerTool(Name = "get_view", ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
@@ -503,18 +546,18 @@ public sealed partial class LensTools(IExplorerHost host)
         }.ToJsonString(Json.Options), cancel);
 
     [McpServerTool(Name = "show_in_view", ReadOnly = false, Idempotent = true, Destructive = false, OpenWorld = false)]
-    [Description("Selects an item in the person's window and shows it on a tab: item (its source and links, a line highlighted), trace (forward or backward from it), or the inventory, rules, dead code or problems tab. Headless, it only remembers it (render_view draws it).")]
+    [Description("Selects an item in the person's window and shows it on a tab: item (its source and links, a line highlighted), trace (forward or backward from it), graph (what drives it and what it drives), or the inventory, rules, dead code or problems tab. Headless, it only remembers it (render_view draws it).")]
     public Task<string> ShowInView(
         [Description(ItemHelp + " Optional for the inventory, rules, dead code and problems tabs.")] string? item = null,
-        [Description("item (the default), trace, trace backward, inventory, rules, dead code or problems.")] string tab = "item",
+        [Description("item (the default), trace, trace backward, graph, inventory, rules, dead code or problems.")] string tab = "item",
         [Description("A line to highlight in the item's source. Optional.")] int line = 0,
         CancellationToken cancel = default) =>
         OnMap("showed something", (s, map) =>
         {
             var t = tab.Trim().ToLowerInvariant();
-            if (t is not ("item" or "trace" or "trace backward" or "inventory" or "rules" or "dead code" or "problems")) throw new ArgumentException("tab is item, trace, trace backward, inventory, rules, dead code or problems.");
+            if (t is not ("item" or "trace" or "trace backward" or "graph" or "inventory" or "rules" or "dead code" or "problems")) throw new ArgumentException("tab is item, trace, trace backward, graph, inventory, rules, dead code or problems.");
             var n = string.IsNullOrWhiteSpace(item) ? null : Resolve(map, item);
-            if (n == null && t is "item" or "trace" or "trace backward") throw new ArgumentException($"The {t} tab needs an item.");
+            if (n == null && t is "item" or "trace" or "trace backward" or "graph") throw new ArgumentException($"The {t} tab needs an item.");
             s.Show(new ViewState(map.Root, n?.Id, t, line));
             return new JsonObject { ["showing"] = t, ["item"] = n?.Id, ["name"] = n == null ? null : Core.Trace.Describe(n) };
         }, cancel);

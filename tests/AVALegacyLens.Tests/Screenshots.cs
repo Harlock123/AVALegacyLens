@@ -45,6 +45,10 @@ public sealed class Screenshots
             Save(w, Path.Combine(dir, "dead-code.png"));
             w.Tabs.SelectedIndex = 5;
             Save(w, Path.Combine(dir, "problems.png"));
+            w.ShowNode(map.Method("BillingRules", "PostCharge"));
+            w.GraphDeeper.IsChecked = true;
+            w.ShowGraph(w.Current);
+            Save(w, Path.Combine(dir, "graph.png"));
             w.Tabs.SelectedIndex = 0;
             Save(w, Path.Combine(dir, "inventory-full.png"));
         }

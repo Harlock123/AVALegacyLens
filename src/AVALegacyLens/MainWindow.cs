@@ -140,6 +140,7 @@ public sealed partial class MainWindow : Window
             new TabItem { Header = "Rules", Content = RulesView, FontSize = 14 },
             new TabItem { Header = "Dead Code", Content = DeadView, FontSize = 14 },
             new TabItem { Header = "Problems", Content = ProblemsView, FontSize = 14 },
+            new TabItem { Header = "Graph", Content = BuildGraphPage(), FontSize = 14 },
         };
         root.Children.Add(main);
         Content = root;
@@ -185,6 +186,8 @@ public sealed partial class MainWindow : Window
                 Item("Sa_ve Lens", () => _ = SaveLens(false), Key.S),
                 Item("Save Lens _As…", () => _ = SaveLens(true)),
                 Item("_Export Report…", () => _ = ExportReport(), Key.E),
+                Item("Export _Parity Plan…", () => _ = ExportParityPlan()),
+                Item("Export Screens as A_XAML…", () => _ = ExportAxaml()),
                 new Separator(),
                 Item("E_xit", Close),
             },
@@ -200,6 +203,7 @@ public sealed partial class MainWindow : Window
                 Item("_Rules", () => Tabs.SelectedIndex = 3, Key.D4),
                 Item("_Dead Code", () => Tabs.SelectedIndex = 4, Key.D5),
                 Item("_Problems", () => Tabs.SelectedIndex = 5, Key.D6),
+                Item("_Graph", () => ShowGraph(_current), Key.D7),
                 new Separator(),
                 Item("Trace _Forward", () => ShowTrace(_current, forward: true), Key.F6, KeyModifiers.None),
                 Item("Trace _Backward", () => ShowTrace(_current, forward: false), Key.F6, KeyModifiers.Shift),
@@ -238,7 +242,10 @@ public sealed partial class MainWindow : Window
         traceForward.Click += (_, _) => ShowTrace(_current, forward: true);
         var traceBackward = new Button { Content = "Trace backward  ⇧F6", FontSize = 12 };
         traceBackward.Click += (_, _) => ShowTrace(_current, forward: false);
+        var graphButton = new Button { Content = "Graph  Ctrl+7", FontSize = 12 };
+        graphButton.Click += (_, _) => ShowGraph(_current);
         var traceButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        traceButtons.Children.Add(graphButton);
         traceButtons.Children.Add(traceForward);
         traceButtons.Children.Add(traceBackward);
         var titleRow = new DockPanel();
@@ -651,7 +658,10 @@ public sealed partial class MainWindow : Window
     // ----- The selected item -----
 
     /// <summary>Shows a node on the Item tab: its place, properties, source and links; selects it in the tree.</summary>
-    public void ShowNode(Node node, bool selectInTree = true)
+    public void ShowNode(Node node, bool selectInTree = true) => ShowNode(node, selectInTree, tab: true);
+
+    /// <summary>Shows a node; <paramref name="tab"/> false leaves the tab as it is (the Graph tab moving on).</summary>
+    public void ShowNode(Node node, bool selectInTree, bool tab)
     {
         if (_map == null) return;
         _current = node;
@@ -677,7 +687,7 @@ public sealed partial class MainWindow : Window
         UsesTitle.Text = $"USES ({uses.Count})";
         UsedByTitle.Text = $"USED BY ({usedBy.Count})";
         ShowSource(node);
-        Tabs.SelectedIndex = 1;
+        if (tab) Tabs.SelectedIndex = 1;
         if (selectInTree) SelectInTree(node);
         Say(node.Id);
     }
@@ -785,12 +795,12 @@ public sealed partial class MainWindow : Window
 
     public void Say(string text) => txtStatusBar.Text = text;
 
-    private static readonly string[] TabNames = ["inventory", "item", "trace", "rules", "dead code", "problems"];
+    private static readonly string[] TabNames = ["inventory", "item", "trace", "rules", "dead code", "problems", "graph"];
 
     /// <summary>What the window shows, for agents (get_view, checkpoints).</summary>
     internal ViewState CurrentView => new(
         _map == null ? null : _lensPath ?? _map.Root,
-        Tabs.SelectedIndex is 1 or 2 ? _current?.Id : null,
+        Tabs.SelectedIndex is 1 or 2 or 6 ? _current?.Id : null,
         Tabs.SelectedIndex == 2 && TraceBackwardButton.IsChecked == true ? "trace backward" : TabNames[Math.Clamp(Tabs.SelectedIndex, 0, TabNames.Length - 1)],
         0);
 
@@ -803,6 +813,10 @@ public sealed partial class MainWindow : Window
             case "item" when node != null:
                 ShowNode(node);
                 if (view.Line > 0) HighlightSource(view.Line, view.Line);
+                break;
+            case "graph" when node != null:
+                ShowNode(node);
+                ShowGraph(node);
                 break;
             case "trace" or "trace backward" when node != null:
                 ShowNode(node);

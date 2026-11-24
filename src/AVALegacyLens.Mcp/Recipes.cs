@@ -100,6 +100,36 @@ public static class Recipes
         return r.Text("List the high risks first (SQL built by joining strings, passwords in code), each with its file:line, why it matters and the fix; then the medium ones grouped. For the one read closely, quote the lines that are the problem.");
     }
 
+    [McpServerPrompt(Name = "plan_parity_checks", Title = "Plan the parity checks")]
+    [Description("Plans how to prove the rebuild matches the old system: which tables and procedures to compare, keyed how, with what tolerances, as an AVAParityCheck suite to open and fill in.")]
+    public static string PlanParityChecks(
+        [Description("The suite to write (default \"parity/plan.parity\").")] string? output = null)
+    {
+        var o = Or(output, "parity/plan.parity");
+        var r = new Recipe("Plan the checks that prove the rebuild does what the old system did.");
+        r.Step("What the system writes and runs.", "get_inventory", new { });
+        r.Step("Write the plan as an AVAParityCheck suite.", "export_parity_plan", new { output = o });
+        r.Step("The rules each check should test with rows that break them.", "list_rules", new { });
+        r.Step("Which tables are only written by guessed SQL (built at run time): check those by hand.", "list_risks", new { severity = "high" });
+        return r.Text("Say where the suite is and list its checks, each with what it compares and why. Then say what it can't cover on its own: test data that exercises each rule (name them), the old and new connections to set up in AVAParityCheck, and the outputs that aren't tables (reports, exported files, screens) to compare another way.");
+    }
+
+    [McpServerPrompt(Name = "port_form_to_avalonia", Title = "Port this screen to Avalonia")]
+    [Description("Drafts an old screen as an Avalonia window for AVAUIDesigner, and lists what to rebuild behind it: each event's handler, the rules it checks and the data it touches.")]
+    public static string PortFormToAvalonia(
+        [Description("The screen (default \"frmPatient\").")] string? screen = null,
+        [Description("The draft to write (default \"drafts/<screen>.axaml\").")] string? output = null)
+    {
+        var s = Or(screen, "frmPatient");
+        var o = Or(output, $"drafts/{s}.axaml");
+        var r = new Recipe($"Draft {s} as an Avalonia window and say what to rebuild behind it.");
+        r.Step("The screen end to end.", "describe_screen", new { screen = s });
+        r.Step("Draft its layout as .axaml.", "export_axaml", new { screen = s, output = o });
+        r.Step("The rules its handlers check, to rebuild as validation.", "list_rules", new { item = s });
+        r.Step("Show the person the screen's main handler.", "render_view", new { item = s });
+        return r.Text("Say where the draft is (open it in AVAUIDesigner). Then, control by control, what each event must do in the rebuild: the old handler (file:line), the rules it checks in their words, the procedures it runs and the tables it writes. Point out controls with no Avalonia counterpart (drawn as placeholders) and logic that sat in the screen that belongs in a service.");
+    }
+
     private static string Or(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
 
     private sealed class Recipe(string intro)

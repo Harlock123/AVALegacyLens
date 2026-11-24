@@ -32,6 +32,10 @@ public sealed class WinFormsReader
         reader.MemberRead += OnMember;
     }
 
+    /// <summary>The fields of the form being read: a name that is one is a control, even if a form property has that name too.</summary>
+    [ThreadStatic]
+    private static HashSet<string>? t_fields;
+
     private static void OnType(TypeContext type)
     {
         if (type.Node.Kind != NodeKind.Form) return;
@@ -45,6 +49,7 @@ public sealed class WinFormsReader
         var map = type.Map;
         var formId = type.Node.Id;
         var fields = FieldLines(type);
+        t_fields = new HashSet<string>(fields.Keys, StringComparer.Ordinal);
         var created = new Dictionary<string, (string Type, int Line)>(StringComparer.OrdinalIgnoreCase);
         var props = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
         var parents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -174,7 +179,7 @@ public sealed class WinFormsReader
         "SuspendLayout", "ResumeLayout", "PerformLayout",
     };
 
-    private static bool IsFormProperty(string name) => FormProperties.Contains(name);
+    private static bool IsFormProperty(string name) => FormProperties.Contains(name) && t_fields?.Contains(name) != true;
 
     private static (SyntaxNode Left, SyntaxNode Right, string Op)? Assignment(SyntaxNode s) => s switch
     {

@@ -170,6 +170,56 @@ public sealed partial class MainWindow
         }
     }
 
+    /// <summary>Saves the parity plan as an AVAParityCheck suite.</summary>
+    public async Task ExportParityPlan()
+    {
+        if (_map == null) return;
+        var path = await PickSaveFile("Save the parity plan (an AVAParityCheck suite)", "parity-plan" + Core.Handoff.ParityPlan.Extension);
+        if (path == null) return;
+        try
+        {
+            Core.Handoff.ParityPlan.Save(_map, path);
+            Say("Saved the parity plan: " + path + ". Open it in AVAParityCheck and set up its old and new connections.");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Say("Couldn't save the parity plan: " + e.Message);
+        }
+    }
+
+    /// <summary>Drafts the selected screen (or, with none selected, every live screen into a folder) as .axaml for AVAUIDesigner.</summary>
+    public async Task ExportAxaml()
+    {
+        if (_map == null) return;
+        var form = _current switch
+        {
+            { Kind: NodeKind.Form } f => f,
+            { Kind: NodeKind.Control or NodeKind.Method } n => _map.PathTo(n.Id).LastOrDefault(p => p.Kind == NodeKind.Form),
+            _ => null,
+        };
+        try
+        {
+            if (form != null)
+            {
+                var path = await PickSaveFile($"Save {form.Name} as an Avalonia draft", form.Name + Core.Handoff.AxamlDraft.Extension);
+                if (path == null) return;
+                File.WriteAllText(path, Core.Handoff.AxamlDraft.Make(_map, form.Id));
+                Say($"Saved a draft of {form.Name}: {path}. Open it in AVAUIDesigner.");
+                return;
+            }
+            if (await PickFolder() is not { } folder) return;
+            var forms = _map.OfKind(NodeKind.Form).Where(f => f.Prop("dead") != "true").ToList();
+            var twice = forms.GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in forms)
+                File.WriteAllText(Path.Combine(folder, (twice.Contains(f.Name) ? $"{f.Prop("project")}-{f.Name}" : f.Name) + Core.Handoff.AxamlDraft.Extension), Core.Handoff.AxamlDraft.Make(_map, f.Id));
+            Say($"Saved drafts of {forms.Count} screens in {folder}. Open them in AVAUIDesigner.");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Say("Couldn't save the drafts: " + e.Message);
+        }
+    }
+
     /// <summary>The estimate, for the Inventory tab.</summary>
     private void AddEstimate()
     {

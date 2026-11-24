@@ -20,6 +20,7 @@ LENS_SHOTS=/tmp/shots dotnet test --filter Screenshots # the README's pictures, 
 LENS_TEST_MSSQL="Server=localhost,11435;User Id=sa;Password=…;TrustServerCertificate=True" dotnet test   # live SQL Server test
 dotnet run --project src/AVALegacyLens -- --mcp --root samples/ClinicLegacy        # the MCP server on stdio
 LENS_LIVE_SERVER=http://localhost:11434 LENS_LIVE_MODEL=qwen3:1.7b dotnet test --filter LiveModelTests
+LENS_UIDESIGNER=…/AVAUIDesigner LENS_PARITYCHECK=…/AVAParityCheck dotnet test --filter HandoffTests   # the hand-offs open in the other apps
 ```
 
 `dotnet test | head` stalls: write the output to a file and grep it.
@@ -46,6 +47,10 @@ LENS_LIVE_SERVER=http://localhost:11434 LENS_LIVE_MODEL=qwen3:1.7b dotnet test -
   - `Config/ConfigReader.cs`: connection strings (password never kept), settings (secrets masked), outside systems
     (shares, web addresses) and code that uses them.
   - `Inventory.cs`: counts, lines by language, project sizes, the most complex methods. `Usage.cs`: writers and readers.
+    `Neighbourhood.cs`: an item's neighbourhood in columns, for the Graph tab.
+  - `Handoff/`: `ParityPlan` (an AVAParityCheck suite: a check per table the live code writes and per procedure that
+    returns rows; connections named "old" and "new", never connection strings), `AxamlDraft` (an old screen as an
+    Avalonia window for AVAUIDesigner: a Canvas with the same places and sizes, events in comments).
   - `Findings/`: `Finding` (rule, dead code or risk; its `Id` is kind|category|node|line so marks survive a rescan),
     `DotNetRules` (validations, notices, decisions, limits in VB.NET/C#), rules in `SqlReader` (RAISERROR/THROW in IF,
     CASE, CHECK) and `Vb6Reader` (MsgBox/Exit, guards, Select Case), `Analysis` (reachability from entry points →
@@ -63,7 +68,7 @@ LENS_LIVE_SERVER=http://localhost:11434 LENS_LIVE_MODEL=qwen3:1.7b dotnet test -
     the 6 recipes. `LiveListener`, `LiveBridge`, `NetworkListener`, `McpCommandLine`, `Workspace` and `Json` are
     AVAHL7Explorer's (and AVAQueryBuilder's) with the names changed: fix them together.
 - `src/AVALegacyLens/`: the window, built in code with no XAML (`MainWindow.cs`, `MainWindow.Trace.cs`,
-  `MainWindow.Findings.cs` with `FindingsView`, `MainWindow.Agents.cs`, `ConnectionDialog.cs`, `ViewPainter.cs`,
+  `MainWindow.Findings.cs` with `FindingsView`, `MainWindow.Graph.cs` with `GraphView`, `MainWindow.Agents.cs`, `ConnectionDialog.cs`, `ViewPainter.cs`,
   `Look.cs`). `Agents/`: `Chat/` and `ChatPanel.cs` are copies of AVAHL7Explorer's (themselves AVA Modeler's
   `AVAModeler.Chat`) with this app's wording: a fix there may be wanted here. `LiveAgents.cs` (`WindowSession`: agents
   work on the window's map), `AgentMain.cs` (`--mcp`: Avalonia headless with Skia), `AgentSettings.cs`.
@@ -94,6 +99,9 @@ LENS_LIVE_SERVER=http://localhost:11434 LENS_LIVE_MODEL=qwen3:1.7b dotnet test -
   `AgentTests.ToolNames`, a test, and a line in the README. Recipes are run call by call by `AgentTests`.
 - **No real model, keys or user settings in tests.** `SettingsIsolation` points `AgentSettings.FolderOverride` at a
   temporary folder; chat tests answer from the fake servers.
+- **Hand-offs are proved in the apps that take them.** `HandoffTests` opens every draft in AVAUIDesigner and the
+  parity plan in AVAParityCheck, through their own MCP servers, when their paths are given: run it after changing
+  either format.
 - **Every link joins two nodes**: `SystemMap.RemoveDangling` runs at the end of a scan.
 - **Paths in the map are relative to the scanned folder**, with forward slashes; lines count from 1.
 - **Schema, never data.** `DatabaseReader` queries catalog views only; connection strings are never stored (the map

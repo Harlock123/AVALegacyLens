@@ -226,6 +226,9 @@ public sealed partial class Vb6Reader(SystemMap map, string root, SqlReader sql,
             existing.Props["array"] = "true";
             if (props.TryGetValue("Index", out var index)) existing.Props["Index"] = existing.Prop("Index") is { } i ? $"{i}, {index}" : index;
             if (props.TryGetValue("Caption", out var c)) existing.Props["Text"] = existing.Prop("Text") is { } t ? $"{t} | {c}" : c;
+            // Each member's place, so a draft of the screen can put every one where it was.
+            if (Px(props, "Left") is { } l && Px(props, "Top") is { } tp)
+                existing.Props["Locations"] = (existing.Prop("Locations") ?? existing.Prop("Location") ?? "") + $" | {l}, {tp}";
             return;
         }
         var node = map.Add(new Node { Id = id, Kind = NodeKind.Control, Name = name, Parent = parentId, File = module.File, Line = line, EndLine = line, Language = "VB6" });

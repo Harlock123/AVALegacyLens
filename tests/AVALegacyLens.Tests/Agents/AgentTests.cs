@@ -39,7 +39,8 @@ public sealed class AgentTests
     [
         "list_files", "scan", "open_lens", "save_lens", "get_inventory", "find", "get_node", "list_children", "get_source",
         "trace", "who_writes", "who_reads", "list_screens", "describe_screen", "list_rules", "list_dead_code", "list_risks",
-        "mark_finding", "get_estimate", "explain_sql", "compare_scans", "export_report", "get_view", "show_in_view",
+        "mark_finding", "get_estimate", "explain_sql", "compare_scans", "export_report", "export_parity_plan", "export_axaml",
+        "get_view", "show_in_view",
         "render_view", "batch", "get_recording", "save_steps", "run_steps", "checkpoint", "diff", "render_checkpoint",
         "restore_checkpoint",
     ];
@@ -130,7 +131,7 @@ public sealed class AgentTests
         foreach (var name in ChatTools.Core) Assert.Contains(name, ToolNames);
         // Only these change anything: the scan, the marks, the view, or new files in the working folder.
         var changing = tools.Where(t => t.Annotations?.ReadOnlyHint != true).Select(t => t.Name).Order();
-        Assert.Equal(["batch", "checkpoint", "export_report", "mark_finding", "open_lens", "restore_checkpoint", "run_steps", "save_lens", "save_steps", "scan", "show_in_view"], changing);
+        Assert.Equal(["batch", "checkpoint", "export_axaml", "export_parity_plan", "export_report", "mark_finding", "open_lens", "restore_checkpoint", "run_steps", "save_lens", "save_steps", "scan", "show_in_view"], changing);
         Assert.All(tools, t => Assert.NotEqual(true, t.Annotations?.DestructiveHint));
     });
 
@@ -371,6 +372,8 @@ public sealed class AgentTests
         Try("export_report", new { output = "out/leak.html" });
         Try("export_report", new { output = "out/leak.xlsx" });
         Try("compare_scans", new { before = "out/leak.lens" });
+        Try("export_parity_plan", new { output = "out/leak.parity" });
+        Try("export_axaml", new { output = "out/drafts" });
         Try("checkpoint", new { name = "c" });
         Try("render_checkpoint", new { name = "c" });
 
@@ -379,7 +382,7 @@ public sealed class AgentTests
         foreach (var (call, text) in seen)
             foreach (var secret in Secrets)
                 if (text.Contains(secret, StringComparison.OrdinalIgnoreCase)) leaks.Add($"{call}: {secret}");
-        foreach (var written in new[] { "out/leak.lens", "out/leak.html" })
+        foreach (var written in new[] { "out/leak.lens", "out/leak.html", "out/leak.parity" }.Concat(Directory.EnumerateFiles(Path.Combine(rig.Root, "out", "drafts")).Select(f => Path.GetRelativePath(rig.Root, f))))
         {
             var text = File.ReadAllText(Path.Combine(rig.Root, written));
             foreach (var secret in Secrets)
@@ -398,7 +401,7 @@ public sealed class AgentTests
     public void Every_recipe_runs_call_by_call() => HeadlessApp.Run(() =>
     {
         var recipes = typeof(Recipes).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.GetCustomAttribute<McpServerPromptAttribute>() != null).ToList();
-        Assert.Equal(6, recipes.Count);
+        Assert.Equal(8, recipes.Count);
         foreach (var recipe in recipes)
         {
             using var rig = new Rig();

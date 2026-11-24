@@ -15,7 +15,7 @@ built by concatenation), config files (connection strings with their passwords n
 live SQL Server database's catalog. **It reads code and schema only, never a table's rows.** So you can ask who writes
 `Patient.LastName`, and trace from a button through the code into the procedure, the table and the trigger it fires. Each link says where in the code it
 was seen and how sure the scan is of it (resolved by the compiler, or matched by name across projects and languages).
-*Work in progress: milestone 6 of 7 (the MCP server and the AI Chat).*
+*Work in progress: milestone 7 of 7 (hand-offs to AVAParityCheck and AVAUIDesigner, and the graph).*
 
 From the map it works out what a rebuild needs to know:
 
