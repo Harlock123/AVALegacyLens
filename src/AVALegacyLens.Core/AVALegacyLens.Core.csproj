@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Reading a legacy system: the scanners (Roslyn for VB.NET and C#, later T-SQL and VB6), the system map they build,
+       the .lens file, and everything worked out from the map. No Avalonia, so the tests check it without a window. -->
+  <PropertyGroup>
+    <RootNamespace>AVALegacyLens.Core</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" Version="5.9.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="AVALegacyLens.Tests" />
+  </ItemGroup>
+</Project>

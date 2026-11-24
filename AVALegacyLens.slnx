@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AVALegacyLens.Core/AVALegacyLens.Core.csproj" />
+    <Project Path="src/AVALegacyLens/AVALegacyLens.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AVALegacyLens.Tests/AVALegacyLens.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The window: the system tree, the inventory, each item's source with what it uses and what uses it. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>AVALegacyLens</AssemblyName>
+    <RootNamespace>AVALegacyLens</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+    <!-- Avalonia.FreeDesktop 11.3.12 pulls Tmds.DBus.Protocol 0.21.2, which has a high-severity advisory
+         (CVE-2026-39959); take the patched one. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
+    <ProjectReference Include="..\AVALegacyLens.Core\AVALegacyLens.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="AVALegacyLens.Tests" />
+  </ItemGroup>
+</Project>
