@@ -29,7 +29,7 @@ public sealed class WindowTests
         HeadlessApp.Settle();
         Assert.NotNull(w.Map);
         var top = ((IEnumerable<TreeViewItem>)w.Tree.ItemsSource!).Select(i => ((Node)i.Tag!).Name).ToList();
-        Assert.Equal(["ClinicApp", "ClinicUtil", "Database", "Outside the system"], top);
+        Assert.Equal(["ClaimsEntry", "ClinicApp", "ClinicUtil", "Database", "Outside the system"], top);
         Assert.Equal(0, w.Tabs.SelectedIndex);
         var text = string.Join("\n", w.InventoryPanel.GetVisualDescendantsOfType<TextBlock>().Select(t => t.Text ?? string.Concat(t.Inlines?.OfType<Run>().Select(r => r.Text) ?? [])));
         Assert.Contains("lines of code", text);

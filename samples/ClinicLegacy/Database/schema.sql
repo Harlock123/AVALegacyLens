@@ -42,6 +42,15 @@ CREATE TABLE dbo.AuditLog (
     ChangedOn datetime     NOT NULL DEFAULT GETDATE()
 );
 GO
+-- Claims entered by the VB6 claims screen.
+CREATE TABLE dbo.Claim (
+    ClaimId   int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    PatientId int          NOT NULL REFERENCES dbo.Patient (PatientId),
+    Amount    decimal(9,2) NOT NULL,
+    Status    varchar(8)   NOT NULL,
+    EnteredOn datetime     NOT NULL DEFAULT GETDATE()
+);
+GO
 -- The fax queue from the 2006 referral system. Nothing reads or writes it now.
 CREATE TABLE dbo.FaxQueue (
     FaxId    int IDENTITY(1,1) NOT NULL PRIMARY KEY,

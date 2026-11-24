@@ -14,7 +14,7 @@ public sealed class ScannerTests
     public void Projects_and_the_files_they_compile_are_found()
     {
         var projects = Map.OfKind(NodeKind.Project).Where(p => p.File != null).ToDictionary(p => p.Name);
-        Assert.Equal(["ClinicApp", "ClinicUtil"], projects.Keys.Order());
+        Assert.Equal(["ClaimsEntry", "ClinicApp", "ClinicUtil"], projects.Keys.Order());
         Assert.Equal("VB.NET", projects["ClinicApp"].Language);
         Assert.Equal("C#", projects["ClinicUtil"].Language);
         Assert.Equal("WinExe", projects["ClinicApp"].Prop("outputType"));
@@ -43,7 +43,7 @@ public sealed class ScannerTests
     [Fact]
     public void Forms_are_screens_listed_under_the_file_people_edit()
     {
-        var forms = Map.OfKind(NodeKind.Form).Select(f => f.Name).Order().ToList();
+        var forms = Map.OfKind(NodeKind.Form).Where(f => f.Language == "VB.NET").Select(f => f.Name).Order().ToList();
         Assert.Equal(["frmBilling", "frmMain", "frmPatient"], forms);
         var patient = Map.Type("frmPatient");
         Assert.Equal("ClinicApp/frmPatient.vb", patient.File);
@@ -181,9 +181,9 @@ public sealed class ScannerTests
     public void The_inventory_sums_the_system_up()
     {
         var inv = Map.Inventory();
-        Assert.Equal(3, inv.Counts[NodeKind.Form]);
+        Assert.Equal(4, inv.Counts[NodeKind.Form]);
         Assert.Equal(Map.OfKind(NodeKind.Method).Count(), inv.Counts[NodeKind.Method]);
-        Assert.Equal(["VB.NET", "T-SQL", "C#", "Config"], inv.Languages.Select(l => l.Language));
+        Assert.Equal(["VB.NET", "VB6", "T-SQL", "C#", "Config"], inv.Languages.Select(l => l.Language));
         Assert.Equal(Map.OfKind(NodeKind.File).Sum(f => f.IntProp("code")), inv.TotalCode);
         var app = inv.Projects.Single(p => p.Name == "ClinicApp");
         Assert.Equal(3, app.Screens);

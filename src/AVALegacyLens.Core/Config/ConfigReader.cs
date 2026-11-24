@@ -168,7 +168,7 @@ public sealed partial class ConfigReader(SystemMap map)
             };
             if (text != null && Outside(text) is { } ext)
             {
-                map.Link(m.Node.Id, ext.Id, EdgeKind.Uses, m.File, DotNetReader.Line(node), Certainty.Resolved, "hard-coded: " + text);
+                map.Link(m.Node.Id, ext.Id, EdgeKind.Uses, m.File, DotNetReader.Line(node), Certainty.Resolved, "hard-coded: " + Secrets.Mask(text));
                 m.Node.Props["hardCodedOutside"] = "true";
             }
         }

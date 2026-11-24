@@ -1,6 +1,7 @@
 using AVALegacyLens.Core.Config;
 using AVALegacyLens.Core.Model;
 using AVALegacyLens.Core.Sql;
+using AVALegacyLens.Core.Vb6;
 
 namespace AVALegacyLens.Core.Scanning;
 
@@ -157,12 +158,21 @@ public static class Scanner
                 map.Notes.Add(new ScanNote(SourceFiles.Relative(root, p.Path), 0, $"Couldn't read the project: {e.Message}"));
             }
         }
+        // VB6: projects, forms, modules and classes.
+        if (files.Any(f => SourceFiles.Languages[Path.GetExtension(f)] == "VB6"))
+        {
+            options.Progress?.Report("Reading VB6…");
+            new Vb6Reader(map, root, sql, config).Read(files.Where(f => SourceFiles.Languages[Path.GetExtension(f)] == "VB6").ToList(), cancel);
+        }
+
         options.Progress?.Report("Reading procedures, views, functions and triggers…");
         sql.AnalyzeModules();
         options.Progress?.Report("Matching calls across projects…");
         reader.ResolvePending();
         map.RemoveDangling();
         map.RemoveIfEmpty(SqlReader.ReferencedGroup);
+        foreach (var group in map.OfKind(NodeKind.Project).Where(n => n.Id.StartsWith("folder:", StringComparison.Ordinal)).Select(n => n.Id).ToList())
+            map.RemoveIfEmpty(group);
         options.Progress?.Report($"Scanned {map.Nodes.Count:N0} items and {map.Edges.Count:N0} links.");
         return map;
     }

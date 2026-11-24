@@ -574,7 +574,7 @@ public sealed partial class SqlReader(SystemMap map)
 
     private static string Snip(string text)
     {
-        var one = Regex.Replace(text, @"\s+", " ").Trim();
+        var one = Secrets.Mask(Regex.Replace(text, @"\s+", " ").Trim());
         return one.Length > 160 ? one[..157] + "…" : one;
     }
 

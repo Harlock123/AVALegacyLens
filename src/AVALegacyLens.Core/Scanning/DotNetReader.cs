@@ -419,7 +419,7 @@ public sealed class DotNetReader(SystemMap map, string root)
     /// <summary>A node's text on one line, cut to a readable length.</summary>
     public static string Snippet(SyntaxNode node)
     {
-        var text = string.Join(' ', node.ToString().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()));
+        var text = Secrets.Mask(string.Join(' ', node.ToString().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim())));
         return text.Length > 160 ? text[..157] + "…" : text;
     }
 

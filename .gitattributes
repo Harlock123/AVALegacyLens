@@ -1,0 +1,6 @@
+# VB6 files are Windows-1252 with CRLF line endings: keep them byte for byte.
+*.frm -text
+*.bas -text
+*.cls -text
+*.ctl -text
+*.vbp -text

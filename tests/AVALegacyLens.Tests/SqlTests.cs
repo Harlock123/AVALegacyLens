@@ -70,6 +70,9 @@ public sealed class SqlTests
         { "AuditLog", "TableName", ["trg_Charge_Audit", "usp_SavePatient"] }, { "AuditLog", "KeyValue", ["trg_Charge_Audit", "usp_SavePatient"] },
         { "AuditLog", "Action", ["trg_Charge_Audit", "usp_SavePatient"] },
         { "FaxQueue", "FaxId", [] }, { "FaxQueue", "Number", [] }, { "FaxQueue", "Document", [] },
+        // Written only by the VB6 screen's SQL, built by concatenation.
+        { "Claim", "ClaimId", [] }, { "Claim", "EnteredOn", [] },
+        { "Claim", "PatientId", ["SaveClaim"] }, { "Claim", "Amount", ["SaveClaim"] }, { "Claim", "Status", ["SaveClaim"] },
     };
 
     [Theory]
@@ -218,7 +221,7 @@ public sealed class SqlTests
             Assert.Empty(map.Notes);
             var group = map[DatabaseReader.GroupId(cs)]!;
             Assert.Equal("database", group.Prop("subkind"));
-            Assert.Equal("6", group.Prop("tables"));
+            Assert.Equal("7", group.Prop("tables"));
             Assert.Equal(group.Id, Db(map, "Patient").Parent);
             Assert.Equal("varchar(40)", Col(map, "Patient", "LastName").Prop("type"));
             Assert.Equal("primary", Col(map, "Patient", "PatientId").Prop("key"));
@@ -227,6 +230,7 @@ public sealed class SqlTests
             foreach (var row in ColumnWriters)
             {
                 var (table, column, writers) = row.Data;
+                if (table == "Claim") continue; // written from code, which a database alone doesn't have
                 Assert.Equal(writers, WritersOf(map, Col(map, table, column).Id));
             }
             Assert.Equal(["trg_Charge_Audit", "usp_SavePatient"], WritersOf(map, Db(map, "AuditLog").Id));

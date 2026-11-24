@@ -5,8 +5,8 @@ how the code is put together and the rules that keep it working.
 
 ## What this is
 
-A legacy system analyzer in C# on .NET 10 and Avalonia 11.3: it scans a folder of old code (VB.NET and C# now; T-SQL
-and VB6 to come) into a system map of nodes and links, and shows it. It is the first step of a re-implementation:
+A legacy system analyzer in C# on .NET 10 and Avalonia 11.3: it scans a folder of old code (VB.NET, C#, VB6, T-SQL,
+config files) and optionally a live SQL Server's schema into a system map of nodes and links, and shows it. It is the first step of a re-implementation:
 find out what the old system does, then rebuild it (and prove parity with AVAParityCheck).
 
 ## Commands
@@ -36,6 +36,11 @@ LENS_TEST_MSSQL="Server=localhost,11435;User Id=sa;Password=…;TrustServerCerti
     scripts split at GO, then `AnalyzeModules` reads bodies; `AnalyzeSql` reads SQL from code; a rough regex reading,
     marked Guessed, for dynamic SQL), `EmbeddedSqlReader` (SQL strings in VB/C#, concatenation → Guessed and
     `sqlBuiltByHand`; procedure names given to a *Command), `DatabaseReader` (a live SQL Server's catalog: never rows).
+  - `Vb6/Vb6Reader.cs`: VB6 projects (.vbp), forms' controls from their headers (twips → pixels, containers, control
+    arrays), procedures read line by line (logical lines, comments stripped), handlers by name (`cmdSave_Click`), calls
+    and `New` matched by name across the project (always `ByName`), SQL and connection strings in strings, risks
+    (`On Error Resume Next`, `GoTo`, hard-coded passwords and shares).
+  - `Secrets.cs`: `Mask` runs over every snippet and note the map keeps.
   - `Config/ConfigReader.cs`: connection strings (password never kept), settings (secrets masked), outside systems
     (shares, web addresses) and code that uses them.
   - `Inventory.cs`: counts, lines by language, project sizes, the most complex methods. `Usage.cs`: writers and readers.
@@ -61,6 +66,8 @@ LENS_TEST_MSSQL="Server=localhost,11435;User Id=sa;Password=…;TrustServerCerti
   checks no sample password reaches a .lens file.
 - **SQL scans in order**: every definition (scripts, then databases) before any body or code is read, so references
   resolve; a stand-in made for a name seen before its definition is replaced, keeping its links.
+- **VB6 files are Windows-1252 with CRLF** (`.gitattributes` keeps them byte for byte); read them through
+  `SourceFiles.ReadText`.
 - **No real code or data in the repository.** The sample is invented; its config's passwords are made up for the tests.
 
 ## Making a change
