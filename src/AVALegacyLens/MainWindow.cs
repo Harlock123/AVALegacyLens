@@ -118,6 +118,7 @@ public sealed partial class MainWindow : Window
         {
             new TabItem { Header = "Inventory", Content = new ScrollViewer { Content = InventoryPanel }, FontSize = 14 },
             new TabItem { Header = "Item", Content = BuildItemPage(), FontSize = 14 },
+            new TabItem { Header = "Trace", Content = BuildTracePage(), FontSize = 14 },
         };
         root.Children.Add(main);
         Content = root;
@@ -146,6 +147,8 @@ public sealed partial class MainWindow : Window
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.S, KeyModifiers.Control), Command = new Command(() => _ = SaveLens(false)) });
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F5), Command = new Command(() => _ = Rescan()) });
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F, KeyModifiers.Control), Command = new Command(() => Filter.Focus()) });
+        KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F6), Command = new Command(() => ShowTrace(_current, forward: true)) });
+        KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F6, KeyModifiers.Shift), Command = new Command(() => ShowTrace(_current, forward: false)) });
         var file = new MenuItem
         {
             Header = "_File",
@@ -168,6 +171,10 @@ public sealed partial class MainWindow : Window
             {
                 Item("_Inventory", () => Tabs.SelectedIndex = 0, Key.D1),
                 Item("I_tem", () => Tabs.SelectedIndex = 1, Key.D2),
+                Item("T_race", () => Tabs.SelectedIndex = 2, Key.D3),
+                new Separator(),
+                Item("Trace _Forward", () => ShowTrace(_current, forward: true), Key.F6, KeyModifiers.None),
+                Item("Trace _Backward", () => ShowTrace(_current, forward: false), Key.F6, KeyModifiers.Shift),
                 new Separator(),
                 Item("_Find…", () => Filter.Focus(), Key.F),
                 Item("_Collapse the Tree", () => { foreach (var i in _items.Values) i.IsExpanded = false; }),
@@ -179,7 +186,18 @@ public sealed partial class MainWindow : Window
     private Control BuildItemPage()
     {
         var header = new StackPanel { Margin = new Thickness(16, 12, 16, 8), Spacing = 3 };
-        header.Children.Add(ItemTitle);
+        var traceForward = new Button { Content = "Trace forward  F6", FontSize = 12 };
+        traceForward.Click += (_, _) => ShowTrace(_current, forward: true);
+        var traceBackward = new Button { Content = "Trace backward  ⇧F6", FontSize = 12 };
+        traceBackward.Click += (_, _) => ShowTrace(_current, forward: false);
+        var traceButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        traceButtons.Children.Add(traceForward);
+        traceButtons.Children.Add(traceBackward);
+        var titleRow = new DockPanel();
+        DockPanel.SetDock(traceButtons, Dock.Right);
+        titleRow.Children.Add(traceButtons);
+        titleRow.Children.Add(ItemTitle);
+        header.Children.Add(titleRow);
         header.Children.Add(ItemWhere);
         header.Children.Add(ItemProps);
         SourceScroll.Content = Source;
@@ -387,7 +405,8 @@ public sealed partial class MainWindow : Window
         {
             NodeKind.File => n.Prop("code") is { } c ? $"  {c} lines" : null,
             NodeKind.Method => n.IntProp("complexity") >= 10 ? $"  complexity {n.Prop("complexity")}" : null,
-            NodeKind.Form => "  " + (n.Prop("subkind") ?? "form"),
+            NodeKind.Form => "  " + (n.Prop("title") is { Length: > 0 } title ? $"\"{title}\"" : n.Prop("subkind") ?? "form"),
+            NodeKind.Control => "  " + n.Prop("type") + (n.Prop("Text") is { Length: > 0 } t ? $" \"{t.Replace("&", "", StringComparison.Ordinal)}\"" : ""),
             _ => null,
         };
         if (withPlace && n.File != null) extra = $"  {n.File}:{n.Line}";

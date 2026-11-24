@@ -91,6 +91,7 @@ public static class Scanner
 
         // Code: each project through Roslyn, then what only matches by name.
         var reader = new DotNetReader(map, root);
+        new WinFormsReader().Attach(reader);
         foreach (var p in projects)
         {
             cancel.ThrowIfCancellationRequested();

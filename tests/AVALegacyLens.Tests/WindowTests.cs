@@ -52,7 +52,8 @@ public sealed class WindowTests
         Assert.DoesNotContain("btnSave_Click", Highlighted(w));
         Assert.Contains("ClinicApp/frmPatient.vb:34–53", w.ItemWhere.Text);
         var uses = ((IEnumerable<Relation>)w.UsesList.ItemsSource!).ToList();
-        Assert.Equal(["Age", "IsMinor"], uses.Select(r => r.Other.Name).Order());
+        Assert.Equal(["Age", "IsMinor"], uses.Where(r => r.Edge.Kind == EdgeKind.Calls).Select(r => r.Other.Name).Order());
+        Assert.Contains(uses, r => r.Edge.Kind == EdgeKind.Uses && r.Other.Name == "txtGuardian");
         var usedBy = ((IEnumerable<Relation>)w.UsedByList.ItemsSource!).Single();
         Assert.Equal("btnSave_Click", usedBy.Other.Name);
         // The tree followed: it's selected, its parents expanded.
@@ -69,7 +70,7 @@ public sealed class WindowTests
     public void Finding_by_name_lists_matches_and_opens_one() => HeadlessApp.Run(() =>
     {
         var w = Scanned();
-        w.Filter.Text = "copay";
+        w.Filter.Text = "calculatecop";
         HeadlessApp.Settle();
         Assert.True(w.FilterResults.IsVisible);
         var found = ((IEnumerable<Node>)w.FilterResults.ItemsSource!).ToList();
@@ -80,6 +81,29 @@ public sealed class WindowTests
         w.Filter.Text = "";
         HeadlessApp.Settle();
         Assert.False(w.FilterResults.IsVisible);
+        w.Close();
+    });
+
+    [Fact]
+    public void The_trace_tab_follows_a_button_forward_and_code_backward() => HeadlessApp.Run(() =>
+    {
+        var w = Scanned();
+        var map = w.Map!;
+        w.ShowNode(map[Core.Scanning.WinFormsReader.ControlId(map.Type("frmPatient").Id, "btnSave")]!);
+        w.ShowTrace(w.Current, forward: true);
+        HeadlessApp.Settle();
+        Assert.Equal(2, w.Tabs.SelectedIndex);
+        Assert.Equal("btnSave_Click", w.CurrentTrace!.Next[0].Node.Name);
+        Assert.StartsWith("What Button btnSave", w.TraceTitle.Text);
+        var top = ((IEnumerable<TreeViewItem>)w.TraceTree.ItemsSource!).Single();
+        Assert.True(top.IsExpanded);
+
+        w.ShowNode(map.Method("PatientData", "GetConnection"));
+        w.ShowTrace(w.Current, forward: false);
+        HeadlessApp.Settle();
+        Assert.StartsWith("What reaches method PatientData.GetConnection", w.TraceTitle.Text);
+        Assert.True(w.TraceBackwardButton.IsChecked);
+        Assert.Contains(w.CurrentTrace!.All(), s => s.Node.Name == "btnPost");
         w.Close();
     });
 

@@ -16,6 +16,7 @@ dotnet build AVALegacyLens.slnx
 dotnet test AVALegacyLens.slnx
 dotnet run --project src/AVALegacyLens [folder | file.lens]
 LENS_DUMP=/tmp/map.txt dotnet test --filter Dump      # every node and link of the sample, as text
+LENS_SHOTS=/tmp/shots dotnet test --filter Screenshots # the README's pictures, headless
 ```
 
 `dotnet test | head` stalls: write the output to a file and grep it.
@@ -27,9 +28,13 @@ LENS_DUMP=/tmp/map.txt dotnet test --filter Dump      # every node and link of t
   - `Model/SystemMap.cs`: `Node` (id, kind, name, parent, file and lines, props), `Edge` (from, to, kind, certainty,
     where it was seen), `SystemMap` (lookups both ways, children, paths). `Model/LensFile.cs`: the .lens file (JSON).
   - `Scanning/SourceFiles.cs` (finding projects and files; reading project files; reading text that may be
-    Windows-1252), `LineCounter.cs`, `DotNetReader.cs` (Roslyn, VB.NET and C#), `Scanner.cs` (puts it together).
+    Windows-1252), `LineCounter.cs`, `DotNetReader.cs` (Roslyn, VB.NET and C#; raises `TypeRead` and `MemberRead` for
+    the readers that add to it), `WinFormsReader.cs` (controls from `InitializeComponent`, handlers from `Handles`,
+    `AddHandler` and `+=`, control uses), `Scanner.cs` (puts it together).
   - `Inventory.cs`: counts, lines by language, project sizes, the most complex methods.
-- `src/AVALegacyLens/`: the window, built in code with no XAML (`MainWindow.cs`, `Look.cs`).
+  - `Trace.cs`: forward (screen → controls → handlers → calls…) and backward (code → callers → handlers → controls →
+    screens → whatever opens them), breadth first, cut at a depth and a step count, repeats marked.
+- `src/AVALegacyLens/`: the window, built in code with no XAML (`MainWindow.cs`, `MainWindow.Trace.cs`, `Look.cs`).
 - `tests/AVALegacyLens.Tests/`: xUnit v3 on Avalonia.Headless. `Samples.cs` scans the sample once for every test.
 - `samples/ClinicLegacy/`: the invented sample system.
 
@@ -39,7 +44,7 @@ LENS_DUMP=/tmp/map.txt dotnet test --filter Dump      # every node and link of t
 - **The scan is deterministic and done by code.** The same folder gives the same map. A model may explain the map; it
   never makes it up.
 - **Ids are stable.** Code nodes are `<project key>:<documentation id>` (`ClinicApp:M:ClinicApp.BillingRules.PostCharge(…)`);
-  files `file:<relative path>`; projects `project:<relative path>`. Marks kept in a .lens file depend on them.
+  files `file:<relative path>`; projects `project:<relative path>`; controls `<form id>#<name>`. Marks kept in a .lens file depend on them.
 - **Every link says how sure it is.** `Resolved` when the compiler bound it, `ByName` when matched by name, `Guessed`
   for anything worked out from strings. Never present a guess as a fact.
 - **Every link joins two nodes**: `SystemMap.RemoveDangling` runs at the end of a scan.
