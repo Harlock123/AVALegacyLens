@@ -12,6 +12,7 @@ public sealed class ProjectInfo
     public string? RootNamespace { get; init; }
     public string? OutputType { get; init; }
     public string? Framework { get; init; }
+    public string? StartupObject { get; init; }
     /// <summary>VB project-level imports (<c>&lt;Import Include="System.Data" /&gt;</c>).</summary>
     public List<string> Imports { get; init; } = [];
     /// <summary>Other projects it references (absolute paths).</summary>
@@ -146,6 +147,7 @@ public static class SourceFiles
             RootNamespace = First("RootNamespace"),
             OutputType = First("OutputType"),
             Framework = First("TargetFrameworkVersion") ?? First("TargetFramework") ?? First("TargetFrameworks"),
+            StartupObject = First("StartupObject"),
             Imports = [.. All("Import").Select(e => (string?)e.Attribute("Include")).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!.Trim()).Distinct()],
             ProjectReferences = [.. All("ProjectReference").Select(e => (string?)e.Attribute("Include")).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => Resolve(v!))],
             References = [.. All("Reference").Concat(All("PackageReference")).Select(e => (string?)e.Attribute("Include")).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!.Split(',')[0].Trim()).Distinct()],

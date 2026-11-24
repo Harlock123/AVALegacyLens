@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using AVALegacyLens.Core.Config;
+using AVALegacyLens.Core.Findings;
 using AVALegacyLens.Core.Model;
 using AVALegacyLens.Core.Scanning;
 using AVALegacyLens.Core.Sql;
@@ -317,6 +318,7 @@ public sealed partial class Vb6Reader(SystemMap map, string root, SqlReader sql,
                 var lib = d.Groups[4].Value;
                 var ext = map.Add(new Node { Id = "external:dll:" + lib.ToLowerInvariant(), Kind = NodeKind.External, Name = lib, Parent = map.Outside(), Props = { ["subkind"] = "native library" } });
                 map.Link(id, ext.Id, EdgeKind.Uses, m.File, line, Certainty.Resolved, text);
+                m.Procs.Add(new Proc(node, d.Groups[3].Value, "declare", line, line, []));
                 continue;
             }
             if (ProcStart().Match(text) is { Success: true } p)
@@ -387,6 +389,7 @@ public sealed partial class Vb6Reader(SystemMap map, string root, SqlReader sql,
                 map.Link(from, m.Node.Id, EdgeKind.Handles, m.File, p.Start, Certainty.Resolved, evt);
         }
 
+        Rules(m, p);
         var locals = new Dictionary<string, string>(m.Variables, StringComparer.OrdinalIgnoreCase);
         var storedProcedure = p.Body.Any(b => b.Text.Contains("adCmdStoredProc", StringComparison.OrdinalIgnoreCase));
         foreach (var (line, text) in p.Body)
@@ -451,10 +454,97 @@ public sealed partial class Vb6Reader(SystemMap map, string root, SqlReader sql,
                 if (tok.Equals(p.Name, StringComparison.OrdinalIgnoreCase) && next == "=") continue; // a function setting its result
                 var proc = ProcOf(m, tok, IsAssigned(tokens, i)) ?? _modules.Where(o => o.Key == m.Key && o.Kind == "module" && o != m)
                     .Select(o => ProcOf(o, tok, false)).FirstOrDefault(x => x != null && x.Node.Prop("access")?.Equals("Private", StringComparison.OrdinalIgnoreCase) != true);
-                if (proc != null && proc != p && (i == 0 || next == "(" || i > 0 && tokens[i - 1].Equals("Call", StringComparison.OrdinalIgnoreCase) || proc.Kind == "function" || proc.Kind.StartsWith("property", StringComparison.Ordinal)))
+                if (proc != null && proc != p && (i == 0 || next == "(" || i > 0 && tokens[i - 1].Equals("Call", StringComparison.OrdinalIgnoreCase) || proc.Kind is "function" or "declare" || proc.Kind.StartsWith("property", StringComparison.Ordinal)))
                     map.Link(from, proc.Node.Id, EdgeKind.Calls, m.File, line, Certainty.ByName, snippet);
             }
         }
+    }
+
+    [GeneratedRegex(@"^(?:ElseIf|If)\s+(.*?)\s+Then\s*(.*)$", RegexOptions.IgnoreCase)]
+    private static partial Regex IfLine();
+
+    /// <summary>
+    /// Rules in a VB6 procedure: an If whose block shows a message (MsgBox, Err.Raise) is a validation if it also exits,
+    /// a notice if not; in a procedure named like a check (IsValid, Validate…) a one-line If that exits is a guard; a
+    /// Select Case over literal values is a decision. The outermost qualifying If counts.
+    /// </summary>
+    private void Rules(Module m, Proc p)
+    {
+        var body = p.Body;
+        var checker = Regex.IsMatch(p.Name, "valid|check|verify|allowed|can", RegexOptions.IgnoreCase);
+        for (var i = 0; i < body.Count; i++)
+        {
+            var (line, text) = body[i];
+            if (IfLine().Match(text) is { Success: true } ifm && !text.StartsWith("ElseIf", StringComparison.OrdinalIgnoreCase))
+            {
+                var condition = ifm.Groups[1].Value;
+                var rest = ifm.Groups[2].Value.Trim();
+                List<string> block;
+                var end = i;
+                if (rest.Length > 0) block = [rest];
+                else
+                {
+                    // To the matching End If (or the first Else / ElseIf at this depth).
+                    block = [];
+                    var depth = 0;
+                    for (end = i + 1; end < body.Count; end++)
+                    {
+                        var t = body[end].Text;
+                        if (Regex.IsMatch(t, @"^If\s.*\sThen\s*$", RegexOptions.IgnoreCase)) depth++;
+                        else if (Regex.IsMatch(t, @"^End\s+If\b", RegexOptions.IgnoreCase)) { if (depth == 0) break; depth--; }
+                        else if (depth == 0 && Regex.IsMatch(t, @"^(Else|ElseIf)\b", RegexOptions.IgnoreCase)) break;
+                        block.Add(t);
+                    }
+                }
+                var message = block.Select(MessageOf).FirstOrDefault(x => x != null);
+                var stops = block.Any(t => Regex.IsMatch(t, @"^(Exit\s+(Sub|Function|Property)|End\b(?!\s+If)|Err\.Raise)", RegexOptions.IgnoreCase));
+                if (message != null || stops && checker && rest.Length > 0)
+                {
+                    map.Find(new Finding
+                    {
+                        Kind = FindingKind.Rule,
+                        Category = message == null ? "guard" : stops ? "validation" : "notice",
+                        NodeId = p.Node.Id,
+                        Title = message ?? $"{p.Name} fails when {condition}",
+                        Detail = $"When {condition}" + (stops ? ", it stops." : ", it tells the user and carries on."),
+                        Code = Secrets.Mask("If " + condition + " Then"),
+                        File = m.File,
+                        Line = line,
+                        Confidence = message != null && stops ? Severity.High : Severity.Medium,
+                    });
+                    if (rest.Length == 0) i = end;
+                }
+                continue;
+            }
+            if (Regex.Match(text, @"^Select\s+Case\s+(.+)$", RegexOptions.IgnoreCase) is { Success: true } sel)
+            {
+                var cases = new List<(string Label, string Outcome)>();
+                var literal = true;
+                for (var j = i + 1; j < body.Count && !Regex.IsMatch(body[j].Text, @"^End\s+Select\b", RegexOptions.IgnoreCase); j++)
+                {
+                    if (Regex.Match(body[j].Text, @"^Case\s+(.+)$", RegexOptions.IgnoreCase) is not { Success: true } c) continue;
+                    var label = c.Groups[1].Value.Trim();
+                    if (!label.Equals("Else", StringComparison.OrdinalIgnoreCase) && !Regex.IsMatch(label, @"^(""[^""]*""|-?[\d.]+)(\s*,\s*(""[^""]*""|-?[\d.]+))*$")) literal = false;
+                    cases.Add((label.Equals("Else", StringComparison.OrdinalIgnoreCase) ? "anything else" : label, j + 1 < body.Count ? body[j + 1].Text : "nothing"));
+                }
+                if (literal && cases.Count >= 2)
+                    map.Find(new Finding
+                    {
+                        Kind = FindingKind.Rule, Category = "decision", NodeId = p.Node.Id,
+                        Title = $"{p.Name} decides by {sel.Groups[1].Value}: {string.Join(", ", cases.Select(c => c.Label))}",
+                        Detail = string.Join("; ", cases.Select(c => $"{c.Label} → {c.Outcome}")),
+                        Code = text, File = m.File, Line = line, Confidence = Severity.Medium,
+                    });
+            }
+        }
+    }
+
+    /// <summary>The message a statement shows (MsgBox "…", Err.Raise n, , "…"), if it shows one.</summary>
+    private static string? MessageOf(string statement)
+    {
+        if (!Regex.IsMatch(statement, @"^(Call\s+)?(MsgBox|Err\.Raise)\b|=\s*MsgBox\b", RegexOptions.IgnoreCase)) return null;
+        var literal = Regex.Match(statement, "\"((?:[^\"]|\"\")*)\"");
+        return literal.Success ? literal.Groups[1].Value.Replace("\"\"", "\"") : null;
     }
 
     /// <summary>Whether the member at <paramref name="i"/> is being assigned (<c>c.Amount = 5</c>: Property Let).</summary>

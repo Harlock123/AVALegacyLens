@@ -39,6 +39,14 @@ public sealed class Screenshots
             Save(w, Path.Combine(dir, "trace-sql.png"));
             w.ShowNode(map["db:dbo.usp_savepatient"]!);
             Save(w, Path.Combine(dir, "procedure.png"));
+            w.Tabs.SelectedIndex = 3;
+            Save(w, Path.Combine(dir, "rules.png"));
+            w.Tabs.SelectedIndex = 4;
+            Save(w, Path.Combine(dir, "dead-code.png"));
+            w.Tabs.SelectedIndex = 5;
+            Save(w, Path.Combine(dir, "problems.png"));
+            w.Tabs.SelectedIndex = 0;
+            Save(w, Path.Combine(dir, "inventory-full.png"));
         }
         finally
         {

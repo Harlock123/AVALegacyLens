@@ -121,11 +121,15 @@ public sealed partial class MainWindow : Window
         main.Children.Add(split);
         Grid.SetColumn(Tabs, 2);
         main.Children.Add(Tabs);
+        BuildFindingViews();
         Tabs.ItemsSource = new[]
         {
             new TabItem { Header = "Inventory", Content = new ScrollViewer { Content = InventoryPanel }, FontSize = 14 },
             new TabItem { Header = "Item", Content = BuildItemPage(), FontSize = 14 },
             new TabItem { Header = "Trace", Content = BuildTracePage(), FontSize = 14 },
+            new TabItem { Header = "Rules", Content = RulesView, FontSize = 14 },
+            new TabItem { Header = "Dead Code", Content = DeadView, FontSize = 14 },
+            new TabItem { Header = "Problems", Content = ProblemsView, FontSize = 14 },
         };
         root.Children.Add(main);
         Content = root;
@@ -168,6 +172,7 @@ public sealed partial class MainWindow : Window
                 new Separator(),
                 Item("Sa_ve Lens", () => _ = SaveLens(false), Key.S),
                 Item("Save Lens _As…", () => _ = SaveLens(true)),
+                Item("_Export Report…", () => _ = ExportReport(), Key.E),
                 new Separator(),
                 Item("E_xit", Close),
             },
@@ -180,6 +185,9 @@ public sealed partial class MainWindow : Window
                 Item("_Inventory", () => Tabs.SelectedIndex = 0, Key.D1),
                 Item("I_tem", () => Tabs.SelectedIndex = 1, Key.D2),
                 Item("T_race", () => Tabs.SelectedIndex = 2, Key.D3),
+                Item("_Rules", () => Tabs.SelectedIndex = 3, Key.D4),
+                Item("_Dead Code", () => Tabs.SelectedIndex = 4, Key.D5),
+                Item("_Problems", () => Tabs.SelectedIndex = 5, Key.D6),
                 new Separator(),
                 Item("Trace _Forward", () => ShowTrace(_current, forward: true), Key.F6, KeyModifiers.None),
                 Item("Trace _Backward", () => ShowTrace(_current, forward: false), Key.F6, KeyModifiers.Shift),
@@ -269,6 +277,9 @@ public sealed partial class MainWindow : Window
             Say($"Scanning {folder}…");
             var databases = Databases.ToList();
             var map = await Task.Run(() => Scanner.Scan(folder, new ScanOptions { Progress = progress, Databases = databases }));
+            // A rescan keeps people's marks (findings are matched by id).
+            if (_map != null && string.Equals(_map.Root, map.Root, StringComparison.Ordinal))
+                foreach (var (id, mark) in _map.Marks) map.Marks.TryAdd(id, mark);
             _lensPath = null;
             SetMap(map);
             Say($"Scanned {(map.Root.Length > 0 ? map.Root : "the database")}: {map.Nodes.Count:N0} items, {map.Edges.Count:N0} links" + (map.Notes.Count > 0 ? $", {map.Notes.Count} files couldn't be read" : "") + ".");
@@ -369,6 +380,7 @@ public sealed partial class MainWindow : Window
         foreach (var item in Tree.ItemsSource.Cast<TreeViewItem>().Take(1)) item.IsExpanded = true;
         ShowInventory();
         ClearItem();
+        FillFindings();
         Tabs.SelectedIndex = 0;
         FillFilter();
     }
@@ -441,6 +453,7 @@ public sealed partial class MainWindow : Window
             _ => null,
         };
         if (withPlace && n.File != null) extra = $"  {n.File}:{n.Line}";
+        if (n.Prop("dead") == "true") extra = (extra ?? "") + "  dead";
         if (extra != null) text.Inlines.Add(new Run(extra) { Foreground = Look.Dim, FontSize = 11.5 });
         return text;
     }
@@ -535,6 +548,9 @@ public sealed partial class MainWindow : Window
         foreach (var (kind, label) in new[] { (NodeKind.Form, "screens"), (NodeKind.Type, "types"), (NodeKind.Method, "methods"), (NodeKind.Table, "tables"), (NodeKind.Procedure, "procedures") })
             if (inv.Counts[kind] > 0 || kind is NodeKind.Form or NodeKind.Method) CardOf(inv.Counts[kind].ToString("N0"), label, Look.KindBrush(kind));
         CardOf(inv.Links.ToString("N0"), inv.LinksByName > 0 ? $"links ({inv.LinksByName} by name)" : "links", Look.Text);
+        CardOf(_map.Findings.Count(f => f.Kind == Core.Findings.FindingKind.Rule).ToString("N0"), "rules found", Look.Good);
+        CardOf(_map.Findings.Count(f => f.Kind == Core.Findings.FindingKind.DeadCode).ToString("N0"), "dead items", Look.Dim);
+        CardOf(_map.Findings.Count(f => f.Kind == Core.Findings.FindingKind.Risk && f.Severity == Core.Findings.Severity.High).ToString("N0"), "high risks", Look.Error);
         InventoryPanel.Children.Add(cards);
 
         InventoryPanel.Children.Add(Section("By language"));
@@ -561,6 +577,7 @@ public sealed partial class MainWindow : Window
             }
             InventoryPanel.Children.Add(list);
         }
+        AddEstimate();
         if (_map.Notes.Count > 0)
         {
             InventoryPanel.Children.Add(Section("Couldn't read"));
@@ -617,7 +634,7 @@ public sealed partial class MainWindow : Window
             string.Join(" › ", _map.PathTo(node.Id).SkipLast(1).Select(p => p.Name)) is { Length: > 0 } path ? "in " + path : null,
         }.Where(s => s != null));
         ItemProps.Text = string.Join("   ", node.Props
-            .Where(p => p.Key is not ("subkind" or "project" or "files" or "key" or "fullName" or "sql" or "schema" or "table" or "form") && !(p.Key == "type" && node.Kind == NodeKind.Method))
+            .Where(p => p.Key is not ("subkind" or "project" or "files" or "key" or "fullName" or "sql" or "schema" or "table" or "form" or "dead") && !(p.Key == "type" && node.Kind == NodeKind.Method))
             .Select(p => $"{p.Key}: {p.Value}"));
         ItemProps.IsVisible = ItemProps.Text.Length > 0;
 

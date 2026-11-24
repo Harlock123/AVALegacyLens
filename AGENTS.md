@@ -44,9 +44,15 @@ LENS_TEST_MSSQL="Server=localhost,11435;User Id=sa;Password=…;TrustServerCerti
   - `Config/ConfigReader.cs`: connection strings (password never kept), settings (secrets masked), outside systems
     (shares, web addresses) and code that uses them.
   - `Inventory.cs`: counts, lines by language, project sizes, the most complex methods. `Usage.cs`: writers and readers.
+  - `Findings/`: `Finding` (rule, dead code or risk; its `Id` is kind|category|node|line so marks survive a rescan),
+    `DotNetRules` (validations, notices, decisions, limits in VB.NET/C#), rules in `SqlReader` (RAISERROR/THROW in IF,
+    CASE, CHECK) and `Vb6Reader` (MsgBox/Exit, guards, Select Case), `Analysis` (reachability from entry points →
+    dead code; risks from the props readers set), `Estimate` (person-days from stated weights, dead code left out),
+    `Report` (HTML page and Excel workbook).
   - `Trace.cs`: forward (screen → controls → handlers → calls…) and backward (code → callers → handlers → controls →
     screens → whatever opens them), breadth first, cut at a depth and a step count, repeats marked.
-- `src/AVALegacyLens/`: the window, built in code with no XAML (`MainWindow.cs`, `MainWindow.Trace.cs`, `Look.cs`).
+- `src/AVALegacyLens/`: the window, built in code with no XAML (`MainWindow.cs`, `MainWindow.Trace.cs`,
+  `MainWindow.Findings.cs` with `FindingsView`, `ConnectionDialog.cs`, `Look.cs`).
 - `tests/AVALegacyLens.Tests/`: xUnit v3 on Avalonia.Headless. `Samples.cs` scans the sample once for every test.
 - `samples/ClinicLegacy/`: the invented sample system.
 
@@ -59,6 +65,10 @@ LENS_TEST_MSSQL="Server=localhost,11435;User Id=sa;Password=…;TrustServerCerti
   files `file:<relative path>`; projects `project:<relative path>`; controls `<form id>#<name>`. Marks kept in a .lens file depend on them.
 - **Every link says how sure it is.** `Resolved` when the compiler bound it, `ByName` when matched by name, `Guessed`
   for anything worked out from strings. Never present a guess as a fact.
+- **Findings are bounded by tests.** `FindingsTests` lists every rule, dead item and risk the sample has: a change
+  that finds more (a false hit) or fewer fails it. Add to the sample and the list together.
+- **Readers set facts, Analysis judges.** Readers put facts on nodes (`sqlBuiltByHand`, `onErrorResumeNext`,
+  `hardCodedPassword`, `override`…); `Analysis.Run` turns them into findings after every scan.
 - **Every link joins two nodes**: `SystemMap.RemoveDangling` runs at the end of a scan.
 - **Paths in the map are relative to the scanned folder**, with forward slashes; lines count from 1.
 - **Schema, never data.** `DatabaseReader` queries catalog views only; connection strings are never stored (the map

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AVALegacyLens.Core.Findings;
 
 namespace AVALegacyLens.Core.Model;
 
@@ -138,6 +139,20 @@ public sealed class SystemMap
     public string Root { get; set; } = "";
     public DateTimeOffset ScannedAt { get; set; } = DateTimeOffset.Now;
     public List<ScanNote> Notes { get; init; } = [];
+
+    /// <summary>Rules, dead code and risks: rules are found as code is read, the rest worked out after (<see cref="Analysis"/>).</summary>
+    public List<Finding> Findings { get; init; } = [];
+
+    /// <summary>People's marks on findings, by finding id: kept in the .lens file and carried to a rescan.</summary>
+    public Dictionary<string, Mark> Marks { get; init; } = [];
+
+    public Mark? MarkOf(Finding f) => Marks.GetValueOrDefault(f.Id);
+
+    /// <summary>Adds a finding once (by id).</summary>
+    public void Find(Finding f)
+    {
+        if (Findings.All(x => x.Id != f.Id)) Findings.Add(f);
+    }
 
     public IReadOnlyCollection<Node> Nodes => _nodes.Values;
     public IReadOnlyList<Edge> Edges => _edges;

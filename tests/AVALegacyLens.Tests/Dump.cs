@@ -15,5 +15,6 @@ public class Dump
         foreach (var n in map.Nodes.OrderBy(n => n.Id)) w.WriteLine($"{n.Kind} {n.Id} parent={n.Parent} {n.File}:{n.Line}-{n.EndLine} {string.Join(';', n.Props.Select(p => p.Key + '=' + p.Value))}");
         foreach (var e in map.Edges) w.WriteLine($"EDGE {e.Kind} {e.Certainty} {e.From} -> {e.To} @{e.File}:{e.Line} {e.Note}");
         foreach (var n in map.Notes) w.WriteLine("NOTE " + n);
+        foreach (var f in map.Findings) w.WriteLine($"FINDING {f.Kind} {f.Category} sev={f.Severity} conf={f.Confidence} {f.NodeId} @{f.File}:{f.Line} | {f.Title} | {f.Detail}");
     }
 }

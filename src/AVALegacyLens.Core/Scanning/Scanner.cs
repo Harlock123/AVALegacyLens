@@ -62,6 +62,7 @@ public static class Scanner
             if (p.RootNamespace != null) node.Props["rootNamespace"] = p.RootNamespace;
             if (p.OutputType != null) node.Props["outputType"] = p.OutputType;
             if (p.Framework != null) node.Props["framework"] = p.Framework;
+            if (p.StartupObject != null) node.Props["startup"] = p.StartupObject;
             if (p.References.Count > 0) node.Props["references"] = string.Join(", ", p.References);
         }
         foreach (var p in projects)
@@ -144,6 +145,7 @@ public static class Scanner
         var reader = new DotNetReader(map, root);
         new WinFormsReader().Attach(reader);
         new EmbeddedSqlReader(sql).Attach(reader);
+        new Findings.DotNetRules().Attach(reader);
         config.Attach(reader);
         foreach (var p in projects)
         {
@@ -173,6 +175,8 @@ public static class Scanner
         map.RemoveIfEmpty(SqlReader.ReferencedGroup);
         foreach (var group in map.OfKind(NodeKind.Project).Where(n => n.Id.StartsWith("folder:", StringComparison.Ordinal)).Select(n => n.Id).ToList())
             map.RemoveIfEmpty(group);
+        options.Progress?.Report("Looking for dead code and risks…");
+        Findings.Analysis.Run(map);
         options.Progress?.Report($"Scanned {map.Nodes.Count:N0} items and {map.Edges.Count:N0} links.");
         return map;
     }

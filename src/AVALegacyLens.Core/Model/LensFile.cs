@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AVALegacyLens.Core.Findings;
 
 namespace AVALegacyLens.Core.Model;
 
@@ -27,6 +28,8 @@ public static class LensFile
         public List<Node> Nodes { get; set; } = [];
         public List<Edge> Edges { get; set; } = [];
         public List<ScanNote> Notes { get; set; } = [];
+        public List<Finding> Findings { get; set; } = [];
+        public Dictionary<string, Mark> Marks { get; set; } = [];
     }
 
     public static void Save(SystemMap map, string path)
@@ -39,6 +42,8 @@ public static class LensFile
             Nodes = [.. map.Nodes.OrderBy(n => n.Id, StringComparer.Ordinal)],
             Edges = [.. map.Edges],
             Notes = map.Notes,
+            Findings = map.Findings,
+            Marks = map.Marks,
         };
         var temp = path + ".tmp";
         using (var stream = File.Create(temp)) JsonSerializer.Serialize(stream, dto, Options);
@@ -51,7 +56,7 @@ public static class LensFile
         var dto = JsonSerializer.Deserialize<Dto>(stream, Options) ?? throw new InvalidDataException("Not a .lens file.");
         if (dto.Version is < 1 or > Version)
             throw new InvalidDataException($"This .lens file is version {dto.Version}; this program reads up to {Version}.");
-        var map = new SystemMap { Root = dto.Root, ScannedAt = dto.ScannedAt, Notes = dto.Notes };
+        var map = new SystemMap { Root = dto.Root, ScannedAt = dto.ScannedAt, Notes = dto.Notes, Findings = dto.Findings, Marks = dto.Marks };
         foreach (var n in dto.Nodes) map.Add(n);
         foreach (var e in dto.Edges) map.Link(e);
         return map;

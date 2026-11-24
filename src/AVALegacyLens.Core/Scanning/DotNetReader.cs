@@ -264,6 +264,12 @@ public sealed class DotNetReader(SystemMap map, string root)
             _ => "member",
         };
         if (symbol.IsStatic || symbol.ContainingType.TypeKind == TypeKind.Module) node.Props["shared"] = "true";
+        // Entry points dead-code analysis starts from: overrides and interface members are called by the framework.
+        if (symbol.IsOverride) node.Props["override"] = "true";
+        if (symbol.ContainingType.AllInterfaces.SelectMany(i => i.GetMembers()).Any(im => SymbolEqualityComparer.Default.Equals(symbol.ContainingType.FindImplementationForInterfaceMember(im), symbol))
+            || symbol is IMethodSymbol { ExplicitInterfaceImplementations.Length: > 0 })
+            node.Props["implements"] = "true";
+        if (symbol is IMethodSymbol { Name: "Main", IsStatic: true } || symbol is IMethodSymbol { Name: "Main" } && symbol.ContainingType.TypeKind == TypeKind.Module) node.Props["entry"] = "true";
         var lines = node.EndLine - node.Line + 1;
         node.Props["lines"] = lines.ToString(System.Globalization.CultureInfo.InvariantCulture);
         node.Props["complexity"] = Complexity(decl).ToString(System.Globalization.CultureInfo.InvariantCulture);

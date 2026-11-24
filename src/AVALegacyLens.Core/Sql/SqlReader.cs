@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using AVALegacyLens.Core.Findings;
 using AVALegacyLens.Core.Model;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
@@ -187,6 +188,13 @@ public sealed partial class SqlReader(SystemMap map)
                 {
                     var name = check.ConstraintIdentifier?.Value ?? (column != null ? $"check on {column.Name}" : "check");
                     table.Props["check " + name] = Text(check.CheckCondition);
+                    map.Find(new Finding
+                    {
+                        Kind = FindingKind.Rule, Category = "constraint", NodeId = table.Id,
+                        Title = $"{table.Name}: {Text(check.CheckCondition)}",
+                        Detail = $"The database refuses any row where this isn't true ({name}).",
+                        Code = Snippet(check), File = file, Line = line, Confidence = Severity.High,
+                    });
                     if (column != null) column.Props["check"] = Text(check.CheckCondition);
                     break;
                 }
@@ -270,7 +278,10 @@ public sealed partial class SqlReader(SystemMap map)
     public void AnalyzeModules()
     {
         foreach (var m in _modules)
+        {
             Analyze(m.Id, m.Body, m.File, m.LineOffset, Certainty.Resolved, m.TriggerTable, null);
+            if (map[m.Id] is { Kind: not NodeKind.File } owner) m.Body.Accept(new RuleVisitor(map, owner, m.File, m.LineOffset));
+        }
         _modules.Clear();
     }
 
@@ -551,6 +562,53 @@ public sealed partial class SqlReader(SystemMap map)
             // A column the table is known not to have isn't one of its columns (a variable, an alias of an expression).
             if (table.Prop("defined") != "false" && !map.Contains(SqlNames.ColumnId(tableId, column))) continue;
             map.Link(from, Column(table, column, null, 0).Id, EdgeKind.Reads, file, line, certainty, note);
+        }
+    }
+
+    /// <summary>Rules in a body: an IF that raises an error is a validation (its message the rule); a CASE a calculation.</summary>
+    private sealed class RuleVisitor(SystemMap map, Node owner, string? file, int lineOffset) : TSqlFragmentVisitor
+    {
+        public override void ExplicitVisit(IfStatement node)
+        {
+            var raised = new Raised();
+            node.ThenStatement.Accept(raised);
+            if (raised.Message != null)
+                map.Find(new Finding
+                {
+                    Kind = FindingKind.Rule, Category = "validation", NodeId = owner.Id, Title = raised.Message,
+                    Detail = $"When {Snippet(node.Predicate)}, {owner.Name} raises an error.",
+                    Code = "IF " + Snippet(node.Predicate), File = file, Line = node.StartLine + lineOffset, Confidence = Severity.High,
+                });
+            base.ExplicitVisit(node);
+        }
+
+        public override void ExplicitVisit(SearchedCaseExpression node)
+        {
+            map.Find(new Finding
+            {
+                Kind = FindingKind.Rule, Category = "calculation", NodeId = owner.Id,
+                Title = $"{owner.Name} works out a value: {Snippet(node)}",
+                Detail = string.Join("; ", node.WhenClauses.Select(w => $"when {Snippet(w.WhenExpression)} → {Snippet(w.ThenExpression)}")) + (node.ElseExpression != null ? $"; otherwise {Snippet(node.ElseExpression)}" : ""),
+                Code = Snippet(node), File = file, Line = node.StartLine + lineOffset, Confidence = Severity.Medium,
+            });
+            base.ExplicitVisit(node);
+        }
+
+        private sealed class Raised : TSqlFragmentVisitor
+        {
+            public string? Message { get; private set; }
+
+            public override void ExplicitVisit(RaiseErrorStatement node)
+            {
+                Message ??= node.FirstParameter is StringLiteral s ? s.Value : Snippet(node.FirstParameter);
+                base.ExplicitVisit(node);
+            }
+
+            public override void ExplicitVisit(ThrowStatement node)
+            {
+                Message ??= node.Message is StringLiteral s ? s.Value : node.Message != null ? Snippet(node.Message) : "THROW";
+                base.ExplicitVisit(node);
+            }
         }
     }
 

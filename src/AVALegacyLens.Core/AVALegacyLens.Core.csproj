@@ -12,6 +12,8 @@
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.107.0" />
     <!-- A live SQL Server's catalog (sys.tables, sys.sql_modules…): its schema only, never its rows. -->
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+    <!-- Excel reports (.xlsx). -->
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
     <!-- SqlClient 6.1 pulls in Pkcs 9.0.11, which has known advisories; take the patched one. -->
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
   </ItemGroup>

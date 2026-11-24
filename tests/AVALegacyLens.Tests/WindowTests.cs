@@ -140,6 +140,63 @@ public sealed class WindowTests
     });
 
     [Fact]
+    public void Findings_tabs_list_mark_and_filter() => HeadlessApp.Run(() =>
+    {
+        var w = new MainWindow();
+        w.Show();
+        w.SetMap(Core.Scanning.Scanner.Scan(Samples.Clinic));
+        HeadlessApp.Settle();
+        Assert.Equal(23, w.RulesView.Shown.Count);
+        Assert.Equal(17, w.DeadView.Shown.Count);
+        Assert.Equal(Core.Findings.Severity.High, w.ProblemsView.Shown[0].Severity);
+        Assert.Equal("Rules (23)", ((TabItem[])w.Tabs.ItemsSource!)[3].Header);
+
+        var rule = w.RulesView.Shown.First(f => f.Title == "No patient found.");
+        w.MarkFinding(rule, Core.Findings.MarkState.Noise);
+        Assert.Equal("23 found · 1 marked", w.RulesView.Count.Text);
+        w.RulesView.Filter.SelectedIndex = 1;
+        HeadlessApp.Settle();
+        Assert.Equal(22, w.RulesView.Shown.Count);
+        w.RulesView.Filter.SelectedIndex = 4;
+        HeadlessApp.Settle();
+        Assert.Equal([rule], w.RulesView.Shown);
+
+        // Going to a finding shows its line.
+        w.ShowFinding(rule);
+        HeadlessApp.Settle();
+        Assert.Equal("If found.Rows.Count = 0 Then", Highlighted(w).Trim());
+
+        // A rescan keeps the mark.
+        var scan = w.ScanAsync(Samples.Clinic);
+        for (var i = 0; i < 500 && !scan.IsCompleted; i++) HeadlessApp.Settle(1);
+        HeadlessApp.Settle();
+        Assert.Equal(Core.Findings.MarkState.Noise, w.Map!.MarkOf(w.Map.Findings.Single(f => f.Id == rule.Id))!.State);
+        w.Close();
+    });
+
+    [Fact]
+    public void The_report_exports_as_HTML_or_Excel() => HeadlessApp.Run(() =>
+    {
+        var dir = Directory.CreateTempSubdirectory("lens-report-").FullName;
+        try
+        {
+            var w = Scanned();
+            foreach (var name in new[] { "report.html", "report.xlsx" })
+            {
+                w.PickSaveFile = (_, _) => Task.FromResult<string?>(Path.Combine(dir, name));
+                w.ExportReport().GetAwaiter().GetResult();
+                Assert.True(new FileInfo(Path.Combine(dir, name)).Length > 1000);
+            }
+            Assert.StartsWith("Saved the report", w.txtStatusBar.Text);
+            w.Close();
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    });
+
+    [Fact]
     public void A_scan_saves_as_a_lens_file_and_opens_again() => HeadlessApp.Run(() =>
     {
         var path = Path.Combine(Path.GetTempPath(), $"window-{Guid.NewGuid():N}.lens");
