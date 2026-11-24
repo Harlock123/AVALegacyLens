@@ -1,4 +1,6 @@
+using AVALegacyLens.Core.Config;
 using AVALegacyLens.Core.Model;
+using AVALegacyLens.Core.Sql;
 
 namespace AVALegacyLens.Core.Scanning;
 
@@ -7,6 +9,9 @@ public sealed class ScanOptions
 {
     /// <summary>Told what the scan is doing ("Reading ClinicApp (8 files)…").</summary>
     public IProgress<string>? Progress { get; init; }
+
+    /// <summary>Live SQL Server databases whose schema to read too (connection strings; never kept in the map).</summary>
+    public IReadOnlyList<string> Databases { get; init; } = [];
 }
 
 /// <summary>
@@ -19,13 +24,16 @@ public static class Scanner
     public static SystemMap Scan(string folder, ScanOptions? options = null, CancellationToken cancel = default)
     {
         options ??= new ScanOptions();
-        var root = Path.GetFullPath(File.Exists(folder) ? Path.GetDirectoryName(folder)! : folder).TrimEnd(Path.DirectorySeparatorChar);
-        if (!Directory.Exists(root)) throw new DirectoryNotFoundException($"There's no folder at {folder}.");
+        // No folder: a database alone.
+        var databaseOnly = string.IsNullOrEmpty(folder);
+        if (databaseOnly && options.Databases.Count == 0) throw new ArgumentException("Give a folder, a database, or both.");
+        var root = databaseOnly ? "" : Path.GetFullPath(File.Exists(folder) ? Path.GetDirectoryName(folder)! : folder).TrimEnd(Path.DirectorySeparatorChar);
+        if (!databaseOnly && !Directory.Exists(root)) throw new DirectoryNotFoundException($"There's no folder at {folder}.");
         var map = new SystemMap { Root = root, ScannedAt = DateTimeOffset.Now };
 
         options.Progress?.Report("Finding files…");
-        var files = SourceFiles.Find(root);
-        var projectPaths = SourceFiles.FindProjects(root);
+        var files = databaseOnly ? [] : SourceFiles.Find(root);
+        var projectPaths = databaseOnly ? [] : SourceFiles.FindProjects(root);
         var projects = projectPaths.Select(p => SourceFiles.ReadProject(p, projectPaths)).ToList();
         var inProject = projects.SelectMany(p => p.Sources).ToHashSet(StringComparer.Ordinal);
 
@@ -89,9 +97,53 @@ public static class Scanner
             if (DotNetReader.IsDesignerFile(rel)) node.Props["designer"] = "true";
         }
 
+        // SQL definitions first, from scripts and live databases, so code and bodies resolve against them.
+        var sql = new SqlReader(map);
+        foreach (var f in files.Where(f => f.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)))
+        {
+            cancel.ThrowIfCancellationRequested();
+            options.Progress?.Report($"Reading {Path.GetFileName(f)}…");
+            var rel = SourceFiles.Relative(root, f);
+            try
+            {
+                sql.ReadScript(rel, SourceFiles.ReadText(f), "file:" + rel);
+            }
+            catch (IOException e)
+            {
+                map.Notes.Add(new ScanNote(rel, 0, "Couldn't read: " + e.Message));
+            }
+        }
+        foreach (var cs in options.Databases)
+        {
+            try
+            {
+                DatabaseReader.Read(map, sql, cs, options.Progress, cancel);
+            }
+            catch (Exception e) when (e is Microsoft.Data.SqlClient.SqlException or InvalidOperationException or ArgumentException)
+            {
+                map.Notes.Add(new ScanNote("database", 0, $"Couldn't read the database: {e.Message}"));
+            }
+        }
+
+        // Config files: connection strings and settings.
+        var config = new ConfigReader(map);
+        foreach (var f in files.Where(f => f.EndsWith(".config", StringComparison.OrdinalIgnoreCase) && !Path.GetFileName(f).Equals("packages.config", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                config.ReadFile(SourceFiles.Relative(root, f), SourceFiles.ReadText(f));
+            }
+            catch (IOException e)
+            {
+                map.Notes.Add(new ScanNote(SourceFiles.Relative(root, f), 0, "Couldn't read: " + e.Message));
+            }
+        }
+
         // Code: each project through Roslyn, then what only matches by name.
         var reader = new DotNetReader(map, root);
         new WinFormsReader().Attach(reader);
+        new EmbeddedSqlReader(sql).Attach(reader);
+        config.Attach(reader);
         foreach (var p in projects)
         {
             cancel.ThrowIfCancellationRequested();
@@ -105,9 +157,12 @@ public static class Scanner
                 map.Notes.Add(new ScanNote(SourceFiles.Relative(root, p.Path), 0, $"Couldn't read the project: {e.Message}"));
             }
         }
+        options.Progress?.Report("Reading procedures, views, functions and triggers…");
+        sql.AnalyzeModules();
         options.Progress?.Report("Matching calls across projects…");
         reader.ResolvePending();
         map.RemoveDangling();
+        map.RemoveIfEmpty(SqlReader.ReferencedGroup);
         options.Progress?.Report($"Scanned {map.Nodes.Count:N0} items and {map.Edges.Count:N0} links.");
         return map;
     }

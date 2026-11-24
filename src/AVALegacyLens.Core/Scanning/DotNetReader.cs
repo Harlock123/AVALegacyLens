@@ -270,7 +270,7 @@ public sealed class DotNetReader(SystemMap map, string root)
         if (decl is VBS.DeclareStatementSyntax declare)
         {
             var lib = declare.LibraryName.Token.ValueText;
-            var ext = map.Add(new Node { Id = "external:dll:" + lib.ToLowerInvariant(), Kind = NodeKind.External, Name = lib, Props = { ["subkind"] = "native library" } });
+            var ext = map.Add(new Node { Id = "external:dll:" + lib.ToLowerInvariant(), Kind = NodeKind.External, Name = lib, Parent = map.Outside(), Props = { ["subkind"] = "native library" } });
             map.Link(id, ext.Id, EdgeKind.Uses, file, node.Line, note: declare.ToString().Trim());
         }
         return node;

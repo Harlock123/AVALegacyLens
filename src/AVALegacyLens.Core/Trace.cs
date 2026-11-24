@@ -108,13 +108,23 @@ public static class Trace
                 foreach (var e in map.To(node.Id).Where(e => e.Kind == EdgeKind.Handles).OrderBy(e => e.Note, StringComparer.Ordinal))
                     if (map[e.From] is { } h) list.Add((h, e, $"on {e.Note}"));
                 break;
-            case NodeKind.Table or NodeKind.Column or NodeKind.Setting or NodeKind.Connection or NodeKind.External:
+            case NodeKind.Table:
+                // Writing a table fires its triggers.
+                if (step.Edge?.Kind == EdgeKind.Writes)
+                    foreach (var e in map.To(node.Id).Where(e => e.Kind == EdgeKind.Handles))
+                        if (map[e.From] is { } trigger && (e.Note ?? "").Contains(VerbOf(step.Edge), StringComparison.OrdinalIgnoreCase))
+                            list.Add((trigger, e, "fires"));
+                break;
+            case NodeKind.Column or NodeKind.Setting or NodeKind.Connection or NodeKind.External:
                 break;
             default:
-                foreach (var e in map.From(node.Id).Where(e => Onward.Contains(e.Kind) || e.Kind == EdgeKind.Uses && IsOutside(map[e.To])).OrderBy(e => e.Line))
+                var edges = map.From(node.Id).Where(e => Onward.Contains(e.Kind) || e.Kind == EdgeKind.Uses && IsOutside(map[e.To])).OrderBy(e => e.Line).ToList();
+                var tables = edges.Select(e => e.To).ToHashSet(StringComparer.Ordinal);
+                foreach (var e in edges)
                 {
                     if (map[e.To] is not { } to) continue;
-                    // A method that only touches its own form's controls: those are shown on the item, not traced.
+                    // Columns are detail: shown only when their table isn't a step already.
+                    if (to.Kind == NodeKind.Column && to.Parent != null && tables.Contains(to.Parent)) continue;
                     list.Add((to, e, Verb(e.Kind, forward: true)));
                 }
                 break;
@@ -144,6 +154,13 @@ public static class Trace
                 break;
         }
         return [.. list.GroupBy(x => x.Item1.Id).Select(g => g.First())];
+    }
+
+    /// <summary>INSERT, UPDATE or DELETE from a write's note ("UPDATE: UPDATE dbo.Patient…"); a trigger on any fires for a MERGE.</summary>
+    private static string VerbOf(Edge write)
+    {
+        var verb = (write.Note ?? "").Split(':')[0].Trim();
+        return verb is "INSERT" or "UPDATE" or "DELETE" ? verb : "";
     }
 
     /// <summary>The controls of a screen, nested ones included, in tab order then position.</summary>
@@ -208,6 +225,7 @@ public static class Trace
         NodeKind.Method => $"method {n.Prop("type")}.{n.Name}",
         NodeKind.Control => $"{n.Prop("type") ?? "control"} {n.Name}" + (n.Prop("Text") is { Length: > 0 } t ? $" \"{t.Replace("&", "", StringComparison.Ordinal)}\"" : ""),
         NodeKind.Form => $"screen {n.Name}" + (n.Prop("title") is { Length: > 0 } title ? $" \"{title}\"" : ""),
+        NodeKind.Column => $"column {n.Prop("table")}.{n.Name}",
         _ => $"{n.Kind.ToString().ToLowerInvariant()} {n.Name}",
     };
 }

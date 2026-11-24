@@ -34,6 +34,11 @@ public sealed class Screenshots
             w.ShowNode(map[WinFormsReader.ControlId(map.Type("frmPatient").Id, "btnSave")]!);
             w.ShowTrace(w.Current, forward: true);
             Save(w, Path.Combine(dir, "trace.png"));
+            w.ShowNode(map[WinFormsReader.ControlId(map.Type("frmBilling").Id, "btnPost")]!);
+            w.ShowTrace(w.Current, forward: true);
+            Save(w, Path.Combine(dir, "trace-sql.png"));
+            w.ShowNode(map["db:dbo.usp_savepatient"]!);
+            Save(w, Path.Combine(dir, "procedure.png"));
         }
         finally
         {

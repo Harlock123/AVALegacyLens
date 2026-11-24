@@ -13,7 +13,7 @@ public sealed class ScannerTests
     [Fact]
     public void Projects_and_the_files_they_compile_are_found()
     {
-        var projects = Map.OfKind(NodeKind.Project).Where(p => p.Prop("subkind") != "folder").ToDictionary(p => p.Name);
+        var projects = Map.OfKind(NodeKind.Project).Where(p => p.File != null).ToDictionary(p => p.Name);
         Assert.Equal(["ClinicApp", "ClinicUtil"], projects.Keys.Order());
         Assert.Equal("VB.NET", projects["ClinicApp"].Language);
         Assert.Equal("C#", projects["ClinicUtil"].Language);

@@ -29,7 +29,7 @@ public sealed class WindowTests
         HeadlessApp.Settle();
         Assert.NotNull(w.Map);
         var top = ((IEnumerable<TreeViewItem>)w.Tree.ItemsSource!).Select(i => ((Node)i.Tag!).Name).ToList();
-        Assert.Equal(["ClinicApp", "ClinicUtil", "Database"], top);
+        Assert.Equal(["ClinicApp", "ClinicUtil", "Database", "Outside the system"], top);
         Assert.Equal(0, w.Tabs.SelectedIndex);
         var text = string.Join("\n", w.InventoryPanel.GetVisualDescendantsOfType<TextBlock>().Select(t => t.Text ?? string.Concat(t.Inlines?.OfType<Run>().Select(r => r.Text) ?? [])));
         Assert.Contains("lines of code", text);
@@ -104,6 +104,38 @@ public sealed class WindowTests
         Assert.StartsWith("What reaches method PatientData.GetConnection", w.TraceTitle.Text);
         Assert.True(w.TraceBackwardButton.IsChecked);
         Assert.Contains(w.CurrentTrace!.All(), s => s.Node.Name == "btnPost");
+        w.Close();
+    });
+
+    [Fact]
+    public void Tables_columns_and_procedures_show_their_SQL() => HeadlessApp.Run(() =>
+    {
+        var w = Scanned();
+        var map = w.Map!;
+        w.ShowNode(map["db:dbo.usp_postcharge"]!);
+        HeadlessApp.Settle();
+        Assert.Contains("CREATE PROCEDURE dbo.usp_PostCharge", Highlighted(w));
+        Assert.Contains("procedure (T-SQL)", w.ItemWhere.Text);
+        var uses = ((IEnumerable<Relation>)w.UsesList.ItemsSource!).ToList();
+        Assert.Contains(uses, r => r.Edge.Kind == EdgeKind.Writes && r.Other.Name == "Charge");
+        var usedBy = ((IEnumerable<Relation>)w.UsedByList.ItemsSource!).ToList();
+        Assert.Contains(usedBy, r => r.Edge.Kind == EdgeKind.Executes && r.Other.Name == "PostCharge");
+
+        w.ShowNode(map["db:dbo.patient.lastname"]!);
+        HeadlessApp.Settle();
+        Assert.Contains("type: varchar(40)", w.ItemProps.Text);
+        Assert.Contains("LastName   varchar(40) NOT NULL", Highlighted(w));
+        w.Close();
+    });
+
+    [Fact]
+    public void A_connection_string_that_isnt_one_is_refused() => HeadlessApp.Run(() =>
+    {
+        var w = Scanned();
+        w.AskConnection = () => Task.FromResult<string?>("this is not = a ; connection = string = at all");
+        w.AddDatabase().GetAwaiter().GetResult();
+        Assert.Empty(w.Databases);
+        Assert.StartsWith("That isn't a connection string", w.txtStatusBar.Text);
         w.Close();
     });
 

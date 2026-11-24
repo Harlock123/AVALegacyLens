@@ -53,6 +53,12 @@ public sealed partial class MainWindow : Window
     /// <summary>Asks for a .lens file to open; tests answer it themselves.</summary>
     public Func<Task<string?>> PickLens { get; set; }
 
+    /// <summary>Asks for a SQL Server connection string; tests answer it themselves.</summary>
+    public Func<Task<string?>> AskConnection { get; set; }
+
+    /// <summary>Live databases read with each scan (connection strings, kept only while the window is open).</summary>
+    public List<string> Databases { get; } = [];
+
     /// <summary>Asks where to save, given a title and the name to suggest; tests answer it themselves.</summary>
     public Func<string, string, Task<string?>> PickSaveFile { get; set; }
 
@@ -73,6 +79,7 @@ public sealed partial class MainWindow : Window
         PickFolder = AskForFolder;
         PickLens = AskForLens;
         PickSaveFile = AskWhereToSave;
+        AskConnection = () => ConnectionDialog.Ask(this);
 
         var root = new DockPanel();
         var menu = BuildMenu();
@@ -156,6 +163,7 @@ public sealed partial class MainWindow : Window
             {
                 Item("_Scan Folder…", () => _ = ScanPicked(), Key.O),
                 Item("_Open Lens…", () => _ = OpenLensPicked(), Key.L),
+                Item("Add _Database…", () => _ = AddDatabase()),
                 Item("_Rescan", () => _ = Rescan(), Key.F5, KeyModifiers.None),
                 new Separator(),
                 Item("Sa_ve Lens", () => _ = SaveLens(false), Key.S),
@@ -250,7 +258,7 @@ public sealed partial class MainWindow : Window
     public Task OpenAsync(string path) =>
         path.EndsWith(LensFile.Extension, StringComparison.OrdinalIgnoreCase) && File.Exists(path) ? Task.Run(() => OpenLens(path)) : ScanAsync(path);
 
-    /// <summary>Scans a folder off the UI thread and shows the result.</summary>
+    /// <summary>Scans a folder (with the databases added, if any) off the UI thread and shows the result.</summary>
     public async Task ScanAsync(string folder)
     {
         if (_scanning) return;
@@ -259,10 +267,11 @@ public sealed partial class MainWindow : Window
         {
             var progress = new Progress<string>(Say);
             Say($"Scanning {folder}…");
-            var map = await Task.Run(() => Scanner.Scan(folder, new ScanOptions { Progress = progress }));
+            var databases = Databases.ToList();
+            var map = await Task.Run(() => Scanner.Scan(folder, new ScanOptions { Progress = progress, Databases = databases }));
             _lensPath = null;
             SetMap(map);
-            Say($"Scanned {map.Root}: {map.Nodes.Count:N0} items, {map.Edges.Count:N0} links" + (map.Notes.Count > 0 ? $", {map.Notes.Count} files couldn't be read" : "") + ".");
+            Say($"Scanned {(map.Root.Length > 0 ? map.Root : "the database")}: {map.Nodes.Count:N0} items, {map.Edges.Count:N0} links" + (map.Notes.Count > 0 ? $", {map.Notes.Count} files couldn't be read" : "") + ".");
         }
         catch (Exception e)
         {
@@ -310,14 +319,31 @@ public sealed partial class MainWindow : Window
         if (await PickLens() is { } path) await OpenAsync(path);
     }
 
-    private Task Rescan() => _map != null && Directory.Exists(_map.Root) ? ScanAsync(_map.Root) : Task.CompletedTask;
+    private Task Rescan() => _map != null && (_map.Root.Length == 0 || Directory.Exists(_map.Root)) ? ScanAsync(_map.Root) : Task.CompletedTask;
+
+    /// <summary>Adds a live SQL Server database to the scan (its schema only) and scans again.</summary>
+    public async Task AddDatabase()
+    {
+        if (await AskConnection() is not { Length: > 0 } cs) return;
+        try
+        {
+            _ = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(cs);
+        }
+        catch (Exception e) when (e is ArgumentException or FormatException or KeyNotFoundException)
+        {
+            Say("That isn't a connection string: " + e.Message);
+            return;
+        }
+        Databases.Add(cs);
+        await ScanAsync(_map?.Root ?? "");
+    }
 
     public async Task SaveLens(bool ask)
     {
         if (_map == null) return;
         var path = _lensPath;
         if (ask || path == null)
-            path = await PickSaveFile("Save the scan", Path.GetFileName(_map.Root) + LensFile.Extension);
+            path = await PickSaveFile("Save the scan", (_map.Root.Length > 0 ? Path.GetFileName(_map.Root) : "database") + LensFile.Extension);
         if (path == null) return;
         try
         {
@@ -337,7 +363,7 @@ public sealed partial class MainWindow : Window
         _map = map;
         _current = null;
         _items.Clear();
-        Title = "AVA Legacy Lens — " + Path.GetFileName(map.Root);
+        Title = "AVA Legacy Lens — " + (map.Root.Length > 0 ? Path.GetFileName(map.Root) : "database");
         var top = map.Children(null).OrderBy(n => TopOrder(n)).ThenBy(n => n.Name, StringComparer.OrdinalIgnoreCase).ToList();
         Tree.ItemsSource = top.Select(MakeItem).ToList();
         foreach (var item in Tree.ItemsSource.Cast<TreeViewItem>().Take(1)) item.IsExpanded = true;
@@ -347,12 +373,13 @@ public sealed partial class MainWindow : Window
         FillFilter();
     }
 
-    private static int TopOrder(Node n) => n.Kind switch
+    private static int TopOrder(Node n) => n.Prop("subkind") switch
     {
-        NodeKind.Project when n.Prop("subkind") != "folder" => 0,
-        NodeKind.Project => 1,
-        NodeKind.Table or NodeKind.View or NodeKind.Procedure or NodeKind.Function => 2,
-        _ => 3,
+        _ when n.Kind != NodeKind.Project => 4,
+        "folder" => 1,
+        "database" => 2,
+        "outside" => 3,
+        _ => 0,
     };
 
     // ----- The tree -----
@@ -407,6 +434,10 @@ public sealed partial class MainWindow : Window
             NodeKind.Method => n.IntProp("complexity") >= 10 ? $"  complexity {n.Prop("complexity")}" : null,
             NodeKind.Form => "  " + (n.Prop("title") is { Length: > 0 } title ? $"\"{title}\"" : n.Prop("subkind") ?? "form"),
             NodeKind.Control => "  " + n.Prop("type") + (n.Prop("Text") is { Length: > 0 } t ? $" \"{t.Replace("&", "", StringComparison.Ordinal)}\"" : ""),
+            NodeKind.Column => "  " + n.Prop("type") + (n.Prop("key") is { } k ? $" {k} key" : ""),
+            NodeKind.Table when n.Prop("defined") == "false" => "  not defined here",
+            NodeKind.Setting => n.Prop("value") is { } v ? $"  = {v}" : null,
+            NodeKind.Connection => n.Prop("database") is { } db ? $"  {db} on {n.Prop("server")}" : null,
             _ => null,
         };
         if (withPlace && n.File != null) extra = $"  {n.File}:{n.Line}";
@@ -419,7 +450,13 @@ public sealed partial class MainWindow : Window
         var text = new TextBlock { TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 12.5 };
         text.Inlines!.Add(new Run(Verb(r) + " ") { Foreground = Look.Dim });
         text.Inlines.Add(new Run(Look.Glyph(r.Other.Kind) + " ") { Foreground = Look.KindBrush(r.Other.Kind) });
-        var name = r.Other.Kind == NodeKind.Method && r.Other.Prop("type") is { } t ? $"{t}.{r.Other.Name}" : r.Other.Name;
+        var name = r.Other.Kind switch
+        {
+            NodeKind.Method when r.Other.Prop("type") is { } t => $"{t}.{r.Other.Name}",
+            NodeKind.Column when r.Other.Prop("table") is { } table => $"{table}.{r.Other.Name}",
+            NodeKind.Control when r.Other.Prop("form") is { } form => $"{form}.{r.Other.Name}",
+            _ => r.Other.Name,
+        };
         text.Inlines.Add(new Run(name) { Foreground = Look.Text });
         if (r.Edge.Certainty != Certainty.Resolved) text.Inlines.Add(new Run(r.Edge.Certainty == Certainty.ByName ? "  by name" : "  guessed") { Foreground = Look.Warning, FontSize = 11 });
         if (r.Edge.Line > 0) text.Inlines.Add(new Run($"  line {r.Edge.Line}") { Foreground = Look.Dim, FontSize = 11 });
@@ -580,7 +617,7 @@ public sealed partial class MainWindow : Window
             string.Join(" › ", _map.PathTo(node.Id).SkipLast(1).Select(p => p.Name)) is { Length: > 0 } path ? "in " + path : null,
         }.Where(s => s != null));
         ItemProps.Text = string.Join("   ", node.Props
-            .Where(p => p.Key is not ("subkind" or "project" or "files" or "type" or "key" or "fullName" or "parameters"))
+            .Where(p => p.Key is not ("subkind" or "project" or "files" or "key" or "fullName" or "sql" or "schema" or "table" or "form") && !(p.Key == "type" && node.Kind == NodeKind.Method))
             .Select(p => $"{p.Key}: {p.Value}"));
         ItemProps.IsVisible = ItemProps.Text.Length > 0;
 
@@ -615,6 +652,14 @@ public sealed partial class MainWindow : Window
     /// <summary>The node's file with line numbers, its own lines highlighted and scrolled to.</summary>
     private void ShowSource(Node node)
     {
+        if (node.File == null && node.Prop("sql") is { } moduleText)
+        {
+            // From a live database: its text is on the node.
+            _sourceFile = null;
+            _sourceLines = moduleText.Replace("\r\n", "\n").Split('\n');
+            HighlightSource(0, 0);
+            return;
+        }
         if (_map == null || node.File == null || node.Kind == NodeKind.Project)
         {
             _sourceFile = null;

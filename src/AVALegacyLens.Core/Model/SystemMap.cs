@@ -123,6 +123,17 @@ public sealed class SystemMap
     private Dictionary<string, List<Edge>>? _out, _in;
     private Dictionary<string, List<Node>>? _children;
 
+    /// <summary>The group node outside systems sit under (file shares, web addresses, native libraries).</summary>
+    public const string OutsideGroup = "outside";
+
+    /// <summary>The group for outside systems, made the first time something needs it.</summary>
+    public string Outside()
+    {
+        if (!_nodes.ContainsKey(OutsideGroup))
+            Add(new Node { Id = OutsideGroup, Kind = NodeKind.Project, Name = "Outside the system", Props = { ["subkind"] = "outside" } });
+        return OutsideGroup;
+    }
+
     /// <summary>The folder that was scanned (absolute); file paths in the map are relative to it.</summary>
     public string Root { get; set; } = "";
     public DateTimeOffset ScannedAt { get; set; } = DateTimeOffset.Now;
@@ -142,6 +153,22 @@ public sealed class SystemMap
         _nodes[node.Id] = node;
         _children = null;
         return node;
+    }
+
+    /// <summary>Puts a node in place of the one with its id (a stand-in replaced by the real definition), keeping links.</summary>
+    public void Replace(Node node)
+    {
+        _nodes[node.Id] = node;
+        _children = null;
+    }
+
+    /// <summary>Removes a node that nothing links to and nothing sits under (an empty group).</summary>
+    public bool RemoveIfEmpty(string id)
+    {
+        if (!_nodes.ContainsKey(id) || Children(id).Count > 0 || From(id).Count > 0 || To(id).Count > 0) return false;
+        _nodes.Remove(id);
+        _children = null;
+        return true;
     }
 
     /// <summary>Adds an edge, once per (from, to, kind, line).</summary>
