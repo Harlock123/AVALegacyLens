@@ -171,7 +171,9 @@ public sealed class HandoffTests
                     Assert.False(opened.IsError == true, $"{file}: {Text(opened)}");
                     Assert.Contains("\"warnings\":null", Text(opened));
                     var drawn = Await(client.CallToolAsync("render_view", new Dictionary<string, object?>()).AsTask());
-                    Assert.Contains(drawn.Content, c => c is ImageContentBlock);
+                    var image = Assert.Single(drawn.Content.OfType<ImageContentBlock>());
+                    if (Environment.GetEnvironmentVariable("LENS_SHOTS") is { Length: > 0 } shots)
+                        File.WriteAllBytes(Path.Combine(shots, "draft-" + Path.GetFileNameWithoutExtension(file) + ".png"), image.DecodedData.ToArray());
                 }
             }
             finally

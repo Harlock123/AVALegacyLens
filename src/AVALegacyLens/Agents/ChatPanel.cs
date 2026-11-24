@@ -670,9 +670,9 @@ public sealed class ChatPanel : DockPanel
             var server = OpenAICompatibleClient.Describe(_prefs.ChatServerUrl);
             var local = OpenAICompatibleClient.IsLocalUrl(_prefs.ChatServerUrl);
             _intro.Text = _prefs.ChatServerModel.Length == 0
-                ? $"Chat with a model on {server} about the messages in the working folder.\n\n" +
+                ? $"Chat with a model on {server} about the system open here.\n\n" +
                   "No model is chosen yet: press Setup… above, check the base URL (Ollama's on this computer is http://localhost:11434/v1; OpenAI's is https://api.openai.com/v1, with its key under Key…), and enter a model name or press Refresh to list the server's models. The model must support tool calls (qwen3, llama3.1, mistral-small…)."
-                : $"Chat with {_prefs.ChatServerModel} on {server} about the messages in the working folder: {Wording.ServerExamples}. " +
+                : $"Chat with {_prefs.ChatServerModel} on {server} about the system open here: {Wording.ServerExamples}. " +
                   $"You watch it work; {Wording.Undo} " +
                   (local ? "It runs on this computer: nothing leaves it, and there's no bill." : "Requests go only to that server (a cloud service bills its own account for them).") +
                   " Small local models handle simple jobs best.";
@@ -682,18 +682,18 @@ public sealed class ChatPanel : DockPanel
         {
             var where = OpenAICompatibleClient.Describe(claudeUrl);
             _intro.Text = _prefs.ChatAnthropicModel.Length == 0
-                ? $"Chat with a model on {where} through the Messages API (Claude's) about the messages in the working folder.\n\nNo model is chosen yet: press Setup… above and enter the server's model name, or press Refresh to list them. The model must support tool calls."
-                : $"Chat with {_prefs.ChatAnthropicModel} on {where} (Messages API) about the messages in the working folder: {Wording.ServerExamples}. You watch it work; {Wording.Undo} " +
+                ? $"Chat with a model on {where} through the Messages API (Claude's) about the system open here.\n\nNo model is chosen yet: press Setup… above and enter the server's model name, or press Refresh to list them. The model must support tool calls."
+                : $"Chat with {_prefs.ChatAnthropicModel} on {where} (Messages API) about the system open here: {Wording.ServerExamples}. You watch it work; {Wording.Undo} " +
                   (OpenAICompatibleClient.IsLocalUrl(claudeUrl) ? "It runs on this computer: nothing leaves it, and there's no bill." : "Requests go only to that server.") +
                   " Small local models handle simple jobs best.";
             return;
         }
         var key = _keys.Get();
         _intro.Text = key == null
-            ? $"Chat with Claude about the messages in the working folder: {Wording.Examples}.\n\n" +
+            ? $"Chat with Claude about the system open here: {Wording.Examples}.\n\n" +
               $"There's no Anthropic API key yet. Set the {ApiKeyStore.EnvironmentVariable} environment variable before starting {Wording.App}, or press Key… above to enter one. " +
               "Your own Anthropic API account is billed for what the chat uses."
-            : $"Chat with Claude about the messages in the working folder: {Wording.Examples}. " +
+            : $"Chat with Claude about the system open here: {Wording.Examples}. " +
               $"You watch it work; {Wording.Undo} Your Anthropic API account is billed for what it uses.";
     }
 

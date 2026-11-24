@@ -6,8 +6,8 @@ how the code is put together and the rules that keep it working.
 ## What this is
 
 A legacy system analyzer in C# on .NET 10 and Avalonia 11.3: it scans a folder of old code (VB.NET, C#, VB6, T-SQL,
-config files) and optionally a live SQL Server's schema into a system map of nodes and links, and shows it. It is the first step of a re-implementation:
-find out what the old system does, then rebuild it (and prove parity with AVAParityCheck).
+config files) and optionally a live SQL Server's schema into a system map of nodes and links, and shows it. It is the
+first step of a re-implementation: find out what the old system does, then rebuild it (and prove parity with AVAParityCheck).
 
 ## Commands
 
@@ -65,16 +65,19 @@ LENS_UIDESIGNER=…/AVAUIDesigner LENS_PARITYCHECK=…/AVAParityCheck dotnet tes
   - `Hosting.cs`: `ViewState`, `ViewPicture` and `IViewPainter`, `IExplorerSession` (the view, the map, the databases
     the person added, which agents use but never see), `ExplorerHost`, `HeadlessSession`.
   - `LensServer.cs`: the instructions every agent is told, the argument checks, the recording of calls. `Recipes.cs`:
-    the 6 recipes. `LiveListener`, `LiveBridge`, `NetworkListener`, `McpCommandLine`, `Workspace` and `Json` are
+    the 8 recipes. `LiveListener`, `LiveBridge`, `NetworkListener`, `McpCommandLine`, `Workspace` and `Json` are
     AVAHL7Explorer's (and AVAQueryBuilder's) with the names changed: fix them together.
 - `src/AVALegacyLens/`: the window, built in code with no XAML (`MainWindow.cs`, `MainWindow.Trace.cs`,
-  `MainWindow.Findings.cs` with `FindingsView`, `MainWindow.Graph.cs` with `GraphView`, `MainWindow.Agents.cs`, `ConnectionDialog.cs`, `ViewPainter.cs`,
-  `Look.cs`). `Agents/`: `Chat/` and `ChatPanel.cs` are copies of AVAHL7Explorer's (themselves AVA Modeler's
-  `AVAModeler.Chat`) with this app's wording: a fix there may be wanted here. `LiveAgents.cs` (`WindowSession`: agents
+  `MainWindow.Findings.cs` with `FindingsView`, `MainWindow.Graph.cs` with `GraphView`, `MainWindow.Agents.cs`,
+  `ConnectionDialog.cs`, `ViewPainter.cs`, `Look.cs`). `Agents/`: `Chat/` and `ChatPanel.cs` are copies of
+  AVAHL7Explorer's (themselves AVA Modeler's `AVAModeler.Chat`) with this app's wording: a fix there may be wanted here. `LiveAgents.cs` (`WindowSession`: agents
   work on the window's map), `AgentMain.cs` (`--mcp`: Avalonia headless with Skia), `AgentSettings.cs`.
 - `tests/AVALegacyLens.Tests/`: xUnit v3 on Avalonia.Headless. `Samples.cs` scans the sample once for every test.
   `Agents/AgentTests` (every tool, the no-leak test, every recipe, the chat on `FakeModelServer` and
-  `FakeMessagesServer`), `LiveAgentTests` (the pipe and network doors), `Agents/LiveModelTests` (opt-in).
+  `FakeMessagesServer`), `LiveAgentTests` (the pipe and network doors), `HandoffTests`, `Screenshots` and
+  `Agents/LiveModelTests` (opt-in).
+- `Screenshots/`: the README's pictures (`LENS_SHOTS`; the hand-off drafts come from `HandoffTests` with
+  `LENS_UIDESIGNER` set too).
 - `samples/ClinicLegacy/`: the invented sample system.
 
 ## Rules that keep it working
